@@ -26,6 +26,7 @@ venv/
 *.bak
 outputs/*.png
 outputs/*.csv
+outputs/*.html
 
 # Notebooks
 *.ipynb_checkpoints

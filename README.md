@@ -148,6 +148,25 @@ stay crisp). You can also **drag an image onto the card** or **paste one**
 (Ctrl/⌘+V), and the API endpoint you set is remembered on the device. Dark mode
 follows the OS/browser theme.
 
+## 6. Industry grading (ASTM D5430 4-Point)
+Detection is only half of textile QC — mills **grade rolls**. This project adds
+the grading layer real inspection uses (`src/grading.py`): each defect is sized
+in millimetres, assigned **1–4 penalty points** by the ASTM D5430 4-Point System,
+aggregated per 100 yd², and the roll is graded **first/second quality**.
+
+```bash
+# simulated line-scan: slide a window along a fabric strip, size + grade defects,
+# and write an HTML/CSV report with an annotated defect map
+python scripts/inspect_roll.py --image <aitex>/Defect_images/0001_002_00.png \
+    --category aitex --out outputs/roll_report.html
+```
+`/predict` also returns per-defect `size_mm` + `points` and a frame
+`defect_points`. The px→mm scale is a **calibration** (`grading.pixels_per_mm`):
+measured from a known target in a real line, a documented assumption on
+still-image datasets. Hardware-only parts of industrial inspection (line-scan
+cameras, transmitted-light illumination, physical defect marking, MES/ERP) are
+out of scope; the grading/reporting layer is what this adds in software.
+
 ## Tests
 ```bash
 pip install -r requirements-dev.txt

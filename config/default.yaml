@@ -28,6 +28,12 @@ eval:
   box_k: 2.0                 # std multiplier for the adaptive cutoff
   min_box_area: 64           # ignore tiny blobs (noise)
 
+grading:                     # ASTM D5430 4-Point fabric grading (see src/grading.py)
+  # px->mm calibration. In a real line this is MEASURED from a known target; for
+  # still-image datasets it is a documented ASSUMPTION -- override per deployment.
+  pixels_per_mm: 5.0
+  tolerance_per_100sqyd: 40  # <= tolerance => first quality, else second
+
 train:
   batch_size: 8              # inference batch size for fit + eval
   n_vis: 6                   # number of qualitative overlays to save

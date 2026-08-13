@@ -38,6 +38,7 @@ from PIL import Image, UnidentifiedImageError
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from src import grading  # noqa: E402
 from src.config import load_config  # noqa: E402
 from src.data.mvtec import build_transform  # noqa: E402
 from src.experiment import pick_device  # noqa: E402
@@ -55,6 +56,9 @@ except ValueError:
     BOX_THRESHOLD = _bt                 # e.g. "adaptive"
 BOX_K = float(os.getenv("FD_BOX_K", str(getattr(_cfg.eval, "box_k", 2.0))))
 MIN_BOX_AREA = int(_cfg.eval.min_box_area)
+_grading_cfg = getattr(_cfg, "grading", None)
+_ppm_default = str(getattr(_grading_cfg, "pixels_per_mm", 5.0))
+PIXELS_PER_MM = float(os.getenv("FD_PIXELS_PER_MM", _ppm_default))
 MAX_UPLOAD_BYTES = int(float(os.getenv("FD_MAX_UPLOAD_MB", "15")) * 1024 * 1024)
 CKPT_DIR = ROOT / "checkpoints"
 # FD_THRESHOLD overrides whatever the checkpoint was calibrated with. Unset =>
@@ -219,6 +223,10 @@ async def predict(file: UploadFile = File(...), category: str = Form(default=Non
         rgb = viz.denormalize(tensor[0])          # plain resized input, no overlay
         heat = viz.heatmap_overlay(rgb, amap)     # heatmap only, no boxes
         boxes = viz.boxes_from_map(amap, threshold=BOX_THRESHOLD, min_area=MIN_BOX_AREA, k=BOX_K)
+        # ASTM D5430: size each defect in mm and assign 1-4 penalty points.
+        for b in boxes:
+            b["size_mm"] = round(grading.box_size_mm(b["w"], b["h"], PIXELS_PER_MM), 1)
+            b["points"] = grading.defect_points(b["size_mm"])
         boxed = viz.draw_boxes(heat, boxes)       # heatmap + boxes (legacy combined view)
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)
     except Exception as e:  # noqa: BLE001 -- inference failure -> clean 500
@@ -232,7 +240,9 @@ async def predict(file: UploadFile = File(...), category: str = Form(default=Non
         "is_defective": bool(score > thr) if thr is not None else None,
         "threshold": round(thr, 4) if thr is not None else None,
         "num_defects": len(boxes),
-        "boxes": boxes,  # pixel coords in the resized (IMAGE_SIZE) frame
+        "boxes": boxes,  # each: {x,y,w,h,area,score, size_mm, points}
+        "defect_points": int(sum(b["points"] for b in boxes)),  # ASTM D5430, this frame
+        "pixels_per_mm": PIXELS_PER_MM,
         "image_size": IMAGE_SIZE,
         "original_size": [orig_w, orig_h],  # scale boxes by original/image_size
         "latency_ms": latency_ms,

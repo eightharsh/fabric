@@ -22,6 +22,9 @@ ignore = [
     "B008",  # FastAPI declares deps in argument defaults, e.g. File(...) / Depends(...)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"scripts/inspect_roll.py" = ["E501"]  # long lines are embedded HTML/CSS in the report
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
