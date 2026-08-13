@@ -179,6 +179,7 @@ def health():
         "threshold": round(thr, 4) if thr is not None else None,
         "image_size": IMAGE_SIZE,
         "box_threshold": BOX_THRESHOLD,
+        "pixels_per_mm": PIXELS_PER_MM,             # default px->mm calibration (ASTM sizing)
         "available": _available_categories(),       # pick any of these per /predict
         "loaded": sorted(_models),                  # categories warm in memory
         "error": None if model is not None else _load_error,
@@ -186,8 +187,13 @@ def health():
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...), category: str = Form(default=None)):
+async def predict(
+    file: UploadFile = File(...),
+    category: str = Form(default=None),
+    pixels_per_mm: float = Form(default=None),
+):
     category = category or CATEGORY
+    ppm = pixels_per_mm if (pixels_per_mm and pixels_per_mm > 0) else PIXELS_PER_MM
     if category not in _available_categories():
         raise HTTPException(
             status_code=404,
@@ -225,7 +231,7 @@ async def predict(file: UploadFile = File(...), category: str = Form(default=Non
         boxes = viz.boxes_from_map(amap, threshold=BOX_THRESHOLD, min_area=MIN_BOX_AREA, k=BOX_K)
         # ASTM D5430: size each defect in mm and assign 1-4 penalty points.
         for b in boxes:
-            b["size_mm"] = round(grading.box_size_mm(b["w"], b["h"], PIXELS_PER_MM), 1)
+            b["size_mm"] = round(grading.box_size_mm(b["w"], b["h"], ppm), 1)
             b["points"] = grading.defect_points(b["size_mm"])
         boxed = viz.draw_boxes(heat, boxes)       # heatmap + boxes (legacy combined view)
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)
@@ -242,7 +248,7 @@ async def predict(file: UploadFile = File(...), category: str = Form(default=Non
         "num_defects": len(boxes),
         "boxes": boxes,  # each: {x,y,w,h,area,score, size_mm, points}
         "defect_points": int(sum(b["points"] for b in boxes)),  # ASTM D5430, this frame
-        "pixels_per_mm": PIXELS_PER_MM,
+        "pixels_per_mm": ppm,
         "image_size": IMAGE_SIZE,
         "original_size": [orig_w, orig_h],  # scale boxes by original/image_size
         "latency_ms": latency_ms,

@@ -92,6 +92,12 @@
         <p class="hint">Each category has its own DINOv3 memory bank + threshold.</p>
       </div>
 
+      <div style="margin-bottom:var(--s-4)">
+        <label class="label" for="ppm">Calibration — pixels / mm</label>
+        <input class="input" id="ppm" type="number" step="0.1" min="0.1" value="5" />
+        <p class="hint">Sets defect size (mm) and ASTM D5430 4-Point penalties.</p>
+      </div>
+
       <div class="source-row">
         <label class="btn secondary">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4M8 8l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>

@@ -39,6 +39,7 @@ $("category").addEventListener("change", () => {
   localStorage.setItem("fd_category", $("category").value);
   pillCategory();
 });
+$("ppm").addEventListener("change", () => localStorage.setItem("fd_ppm", $("ppm").value));
 
 /* ── Backend health → status pill + category list ────────────────────────── */
 async function checkHealth() {
@@ -49,6 +50,10 @@ async function checkHealth() {
     const d = await res.json();
     $("status").className = "pill ok";
     populateCategories(d.available, d.category);
+    if (!$("ppm").dataset.filled) {
+      $("ppm").value = localStorage.getItem("fd_ppm") || d.pixels_per_mm || 5;
+      $("ppm").dataset.filled = "1";
+    }
     pillCategory();
   } catch {
     $("status").className = "pill down";
@@ -105,6 +110,7 @@ async function runAnalyze(file, btn) {
     const fd = new FormData();
     fd.append("file", file);
     if ($("category").value) fd.append("category", $("category").value);
+    if ($("ppm").value) fd.append("pixels_per_mm", $("ppm").value);
     const res = await fetch($("endpoint").value.trim(), { method: "POST", body: fd });
     if (!res.ok) {
       let detail = "HTTP " + res.status;
@@ -199,17 +205,18 @@ function renderResult(d) {
     tile("Anomaly score", d.anomaly_score) +
     tile("Threshold", d.threshold != null ? d.threshold : "—") +
     tile("Regions", d.num_defects) +
-    tile("Frame", d.image_size, "px");
+    tile("Penalty pts", d.defect_points != null ? d.defect_points : "—");
 
   const hasLayers = !!(d.original_png && d.heatmap_png);
   $("viewTabs").classList.toggle("hide", !hasLayers);
   setView(hasLayers ? "boxes" : "combined");
 
   if (d.boxes && d.boxes.length) {
-    let t = "<div class='boxes-title'>Bounding boxes</div><table class='data'>" +
-      "<tr><th>#</th><th>x, y</th><th>w × h</th><th>score</th></tr>";
+    let t = "<div class='boxes-title'>Defects (ASTM D5430 4-Point)</div><table class='data'>" +
+      "<tr><th>#</th><th>size (mm)</th><th>points</th><th>score</th></tr>";
     d.boxes.forEach((b, i) => {
-      t += `<tr><td>${i + 1}</td><td>${b.x}, ${b.y}</td><td>${b.w} × ${b.h}</td><td>${Number(b.score).toFixed(2)}</td></tr>`;
+      t += `<tr><td>${i + 1}</td><td>${b.size_mm ?? "—"}</td>` +
+        `<td>${b.points ?? "—"}</td><td>${Number(b.score).toFixed(2)}</td></tr>`;
     });
     $("boxWrap").innerHTML = t + "</table>";
   } else $("boxWrap").innerHTML = "";
