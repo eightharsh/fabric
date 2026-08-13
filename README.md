@@ -33,10 +33,11 @@ src/experiment.py       shared fit → evaluate → log pipeline
 src/data/mvtec.py       MVTec AD loader (train/good only for fitting)
 src/utils/              metrics (AUROC, PRO) + heatmap/box visualization
 scripts/train.py        fit memory bank on one category, evaluate, save, log CSV
-scripts/run_experiments.py   backbone comparison sweep -> results.csv
+scripts/run_experiments.py   backbone/category sweep (--categories all) -> results.csv
 scripts/validate_backbone.py 9-point sanity check for any backbone
 scripts/calibrate.py    pick the pass/fail threshold + heatmap bounds
-backend/main.py         FastAPI /predict server
+scripts/prepare_aitex.py     convert the AITEX real-fabric dataset to MVTec layout
+backend/main.py         FastAPI /predict server (multi-category, shared backbone)
 frontend/web/           landing (index.html) + inspection console (app.html)
 tests/                  pytest smoke tests (metrics, boxes, coreset, IO, config)
 paper/outline.md        paper structure + target venues
@@ -49,7 +50,19 @@ so a bare `python scripts/train.py --data-root ...` reproduces the documented ru
 ## 1. Get the data (MVTec AD)
 Download from https://www.mvtec.com/company/research/datasets/mvtec-ad and
 extract so you have `<root>/carpet/train/good/*.png` etc. Textile-like
-categories: `carpet`, `leather`, `grid`. Later add AITEX for real fabric.
+categories: `carpet`, `leather`, `grid` (the pipeline discovers any category
+folder with a `train/good` split; `--categories all` runs every one present).
+
+### Real fabric (AITEX)
+For real woven fabric (harder, more realistic than MVTec's lab textures):
+```bash
+# AITEX = nexuswho/aitex-fabric-image-database on Kaggle (CC BY-NC-ND, academic use)
+python scripts/prepare_aitex.py --src /path/to/aitex_raw --out data   # -> data/aitex/...
+python scripts/train.py --model dinov3_vitl16 --data-root data --category aitex
+python scripts/calibrate.py --data-root data --category aitex
+```
+It crops AITEX's 4096x256 strips into 256x256 tiles in MVTec layout, then trains
+like any other category — and shows up in the app automatically.
 
 ## 2. Train + evaluate (Colab or local)
 ```bash
@@ -86,13 +99,19 @@ Pass/Fail verdict to "any box found".
 ## 4. Run the API
 ```bash
 FD_CATEGORY=carpet uvicorn backend.main:app --host 0.0.0.0 --port 8000
-# POST an image:
-curl -F "file=@sample.png" http://localhost:8000/predict
+# POST an image (optionally pick a category; default = FD_CATEGORY):
+curl -F "file=@sample.png" -F "category=leather" http://localhost:8000/predict
 ```
+The server is **multi-category**: `/predict` takes an optional `category` form
+field and serves any checkpoint in `checkpoints/*.pt`, sharing one backbone
+across categories that use the same feature extractor (so all DINOv3 categories
+load the ~1.2 GB weights once). `GET /categories` lists what's available.
+
 `POST /predict` returns:
 
 | field | meaning |
 |---|---|
+| `category`, `model` | which category + backbone answered |
 | `anomaly_score` | image-level distance from "normal" (higher = more anomalous) |
 | `is_defective` | pass/fail verdict once calibrated, else `null` |
 | `threshold` | the pass/fail cutoff in effect |

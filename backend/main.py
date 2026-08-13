@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 
@@ -40,6 +40,8 @@ sys.path.insert(0, str(ROOT))
 
 from src.config import load_config  # noqa: E402
 from src.data.mvtec import build_transform  # noqa: E402
+from src.experiment import pick_device  # noqa: E402
+from src.models.backbones import build_backbone  # noqa: E402
 from src.models.patchcore import PatchCore  # noqa: E402
 from src.utils import visualize as viz  # noqa: E402
 
@@ -54,34 +56,55 @@ CKPT_DIR = ROOT / "checkpoints"
 # use the checkpoint's calibrated threshold (or box-count fallback if none).
 _THRESHOLD_ENV = os.getenv("FD_THRESHOLD")
 
-_model: PatchCore | None = None
+DEVICE = pick_device()
+_models: dict[str, PatchCore] = {}          # category -> ready PatchCore
+_backbones: dict[tuple, object] = {}        # (model_name, layers) -> shared backbone
 _load_error: str | None = None
-_load_lock = threading.Lock()  # serialize the first (heavy) model load across workers
+_load_lock = threading.Lock()  # serialize the (heavy) model loads across threads
 _tf = build_transform(IMAGE_SIZE)
 
 
-def get_model() -> PatchCore:
-    """Lazily load the checkpoint once, thread-safely. Cheap after the first call."""
-    global _model, _load_error
-    if _model is not None:
-        return _model
+def get_model(category: str) -> PatchCore:
+    """Lazily load + cache the PatchCore for one category, thread-safely.
+
+    Backbones are shared across categories that use the same feature extractor
+    (e.g. all DINOv3 categories load the ~1.2 GB weights ONCE), so switching
+    category only swaps the small memory bank -- never a second big DINO model.
+    """
+    global _load_error
+    if category in _models:
+        return _models[category]
     with _load_lock:
-        if _model is None:  # re-check inside the lock (another thread may have won)
-            ckpt = CKPT_DIR / f"{CATEGORY}.pt"
-            if not ckpt.exists():
-                _load_error = f"checkpoint {ckpt} missing -- run scripts/train.py first"
-                raise RuntimeError(_load_error)
-            # Backbone (name + layers) is reconstructed from the checkpoint.
-            _model = PatchCore.from_checkpoint(str(ckpt))
-            _load_error = None
-    return _model
+        if category in _models:  # another thread may have won the race
+            return _models[category]
+        ckpt = CKPT_DIR / f"{category}.pt"
+        if not ckpt.exists():
+            _load_error = f"checkpoint {ckpt} missing -- run scripts/train.py first"
+            raise RuntimeError(_load_error)
+        meta = torch.load(ckpt, map_location="cpu", weights_only=True)
+        key = (meta["model_name"], tuple(meta.get("layers") or ()))
+        backbone = _backbones.get(key)
+        if backbone is None:
+            backbone = build_backbone(meta["model_name"], layers=meta.get("layers"))
+            _backbones[key] = backbone
+        model = PatchCore(
+            backbone,
+            coreset_ratio=meta.get("coreset_ratio", 0.1),
+            n_neighbors=meta["n_neighbors"],
+            agg_kernel=meta["agg_kernel"],
+            device=DEVICE,
+        )
+        model.load(str(ckpt))  # restores memory bank + calibration (no backbone rebuild)
+        _models[category] = model
+        _load_error = None
+    return model
 
 
-def _threshold() -> float | None:
+def _threshold(model: PatchCore | None) -> float | None:
     """Pass/fail cutoff: env override > checkpoint calibration > None (fallback)."""
     if _THRESHOLD_ENV is not None:
         return float(_THRESHOLD_ENV)
-    return _model.threshold if _model is not None else None
+    return model.threshold if model is not None else None
 
 
 def _available_categories() -> list[str]:
@@ -102,7 +125,7 @@ async def lifespan(app: FastAPI):
     """Load the model at startup so the first request isn't slow and /health is
     honest about readiness. Failures are logged, not fatal -- /health reports."""
     try:
-        get_model()
+        get_model(CATEGORY)
     except Exception as e:  # noqa: BLE001 -- surfaced via /health
         print(f"[startup] model not ready: {e}", file=sys.stderr)
     yield
@@ -132,31 +155,37 @@ def categories():
 
 @app.get("/health")
 def health():
-    ready = _model is not None
-    if not ready:
+    model = _models.get(CATEGORY)
+    if model is None:
         try:
-            get_model()
-            ready = True
+            model = get_model(CATEGORY)
         except Exception:  # noqa: BLE001
-            ready = False
-    thr = _threshold()
+            model = None
+    thr = _threshold(model)
     return {
-        "status": "ok" if ready else "not_ready",
-        "category": CATEGORY,
-        "model": _model.backbone.model_name if _model is not None else None,
-        "calibrated": bool(_model is not None and _model.threshold is not None),
+        "status": "ok" if model is not None else "not_ready",
+        "category": CATEGORY,                       # the default category
+        "model": model.backbone.model_name if model is not None else None,
+        "calibrated": bool(model is not None and model.threshold is not None),
         "threshold": round(thr, 4) if thr is not None else None,
         "image_size": IMAGE_SIZE,
         "box_threshold": BOX_THRESHOLD,
-        "available": _available_categories(),
-        "error": None if ready else _load_error,
+        "available": _available_categories(),       # pick any of these per /predict
+        "loaded": sorted(_models),                  # categories warm in memory
+        "error": None if model is not None else _load_error,
     }
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
+async def predict(file: UploadFile = File(...), category: str = Form(default=None)):
+    category = category or CATEGORY
+    if category not in _available_categories():
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown category '{category}'; available: {_available_categories()}",
+        )
     try:
-        model = get_model()
+        model = get_model(category)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
@@ -190,8 +219,10 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:  # noqa: BLE001 -- inference failure -> clean 500
         raise HTTPException(status_code=500, detail=f"inference failed: {e}") from e
 
-    thr = _threshold()
+    thr = _threshold(model)
     return {
+        "category": category,
+        "model": model.backbone.model_name,
         "anomaly_score": round(score, 4),
         "is_defective": bool(score > thr) if thr is not None else None,
         "threshold": round(thr, 4) if thr is not None else None,

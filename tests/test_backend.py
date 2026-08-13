@@ -22,13 +22,13 @@ def test_root_lists_endpoints():
 
 
 def test_get_model_missing_checkpoint_raises():
-    main._model = None  # ensure a clean lazy-load attempt
+    main._models.clear()  # ensure a clean lazy-load attempt
     with pytest.raises(RuntimeError):
-        main.get_model()
+        main.get_model(main.CATEGORY)
 
 
 def test_health_reports_not_ready_with_reason():
-    main._model = None
+    main._models.clear()
     h = main.health()
     assert h["status"] == "not_ready"
     assert h["category"] == "__no_such_category__"

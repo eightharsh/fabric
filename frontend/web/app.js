@@ -21,7 +21,26 @@ $("endpoint").addEventListener("change", () => {
   checkHealth();
 });
 
-/* ── Backend health → status pill ────────────────────────────────────────── */
+/* ── Category picker ─────────────────────────────────────────────────────── */
+function populateCategories(list, dflt) {
+  const sel = $("category");
+  if (sel.dataset.filled || !list?.length) return;
+  const saved = localStorage.getItem("fd_category");
+  sel.innerHTML = list.map((c) => `<option value="${c}">${c}</option>`).join("");
+  sel.value = saved && list.includes(saved) ? saved : (dflt || list[0]);
+  sel.dataset.filled = "1";
+}
+function pillCategory() {
+  if ($("status").classList.contains("ok")) {
+    $("statusText").textContent = `online · ${$("category").value}`;
+  }
+}
+$("category").addEventListener("change", () => {
+  localStorage.setItem("fd_category", $("category").value);
+  pillCategory();
+});
+
+/* ── Backend health → status pill + category list ────────────────────────── */
 async function checkHealth() {
   const base = $("endpoint").value.trim().replace(/\/predict\/?$/, "");
   try {
@@ -29,7 +48,8 @@ async function checkHealth() {
     if (!res.ok) throw new Error();
     const d = await res.json();
     $("status").className = "pill ok";
-    $("statusText").textContent = `online · ${d.category}`;
+    populateCategories(d.available, d.category);
+    pillCategory();
   } catch {
     $("status").className = "pill down";
     $("statusText").textContent = "backend offline";
@@ -84,6 +104,7 @@ async function runAnalyze(file, btn) {
   try {
     const fd = new FormData();
     fd.append("file", file);
+    if ($("category").value) fd.append("category", $("category").value);
     const res = await fetch($("endpoint").value.trim(), { method: "POST", body: fd });
     if (!res.ok) {
       let detail = "HTTP " + res.status;
@@ -166,7 +187,11 @@ function renderResult(d) {
   $("verdict").innerHTML = (defective ? BAD_ICON : OK_ICON) +
     (defective ? `Defective · ${d.num_defects} region${d.num_defects === 1 ? "" : "s"}` : "Pass · no defect");
 
-  $("latencyTag").textContent = d.latency_ms != null ? `${d.latency_ms} ms` : "";
+  const parts = [];
+  if (d.category) parts.push(d.category);
+  if (d.model) parts.push(d.model);
+  if (d.latency_ms != null) parts.push(`${d.latency_ms} ms`);
+  $("latencyTag").textContent = parts.join(" · ");
 
   const tile = (k, v, sub) =>
     `<div class="stat"><div class="k">${k}</div><div class="v">${v}${sub ? `<small> ${sub}</small>` : ""}</div></div>`;

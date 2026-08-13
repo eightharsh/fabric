@@ -25,14 +25,46 @@ sys.path.insert(0, str(ROOT))
 from src.config import load_config  # noqa: E402
 from src.experiment import pick_device, run_experiment  # noqa: E402
 
-DEFAULT_CATEGORIES = ["carpet", "leather", "grid"]
+# Textile-like subset used for the fabric paper. Not a hard limit -- pass
+# --categories (or `all`) to run any MVTec categories present in --data-root.
+TEXTILE_CATEGORIES = ["carpet", "leather", "grid"]
 DEFAULT_BACKBONES = ["dinov2_vits14", "wide_resnet50_2"]
+
+
+def discover_categories(root) -> list[str]:
+    """Every category folder under `root` that has a train/good split."""
+    root = Path(root)
+    if not root.exists():
+        return []
+    return sorted(p.name for p in root.iterdir() if (p / "train" / "good").is_dir())
+
+
+def resolve_categories(requested, data_root) -> list[str]:
+    """`--categories` values -> concrete list.
+
+    None            -> the textile subset (the paper's default)
+    ['all']         -> every category discovered under data_root (fully dynamic)
+    ['textile']     -> carpet/leather/grid
+    explicit names  -> used as given
+    """
+    if not requested:
+        return TEXTILE_CATEGORIES
+    if [r.lower() for r in requested] == ["all"]:
+        found = discover_categories(data_root)
+        if not found:
+            raise SystemExit(f"no categories with train/good found under {data_root}")
+        return found
+    if [r.lower() for r in requested] == ["textile"]:
+        return TEXTILE_CATEGORIES
+    return requested
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", default=None, help="MVTec root (default: config data.root)")
-    ap.add_argument("--categories", nargs="+", default=DEFAULT_CATEGORIES)
+    ap.add_argument("--categories", nargs="+", default=None,
+                    help="names, or 'all' (discover from data-root) / 'textile'; "
+                         "default: carpet leather grid")
     ap.add_argument("--backbones", nargs="+", default=DEFAULT_BACKBONES)
     ap.add_argument("--image-size", type=int, default=None)
     ap.add_argument("--coreset", type=float, default=None)
@@ -42,6 +74,8 @@ def main():
 
     device = pick_device()
     bench_dir = ROOT / "checkpoints" / "bench"
+    data_root = args.data_root or load_config().data.root
+    args.categories = resolve_categories(args.categories, data_root)
     grid = [(c, b) for c in args.categories for b in args.backbones]
     print(
         f"device={device}  runs={len(grid)}  "
