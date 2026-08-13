@@ -18,8 +18,10 @@ venv/
 .env
 
 # Data & large artifacts (see README for how to fetch / regenerate)
-data/
-mvtec/
+# NOTE: anchored with a leading slash so these match ONLY the top-level dataset
+# dirs -- an unanchored `data/` would also ignore the source pkg src/data/.
+/data/
+/mvtec/
 *.pt
 *.bak
 outputs/*.png
