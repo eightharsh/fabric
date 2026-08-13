@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Operator Dashboard — Fabric Inspect</title>
+<meta name="color-scheme" content="dark" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* dark control-room surface (distinct from the light customer app) */
+  :root{
+    --bg:#08080a; --panel:#101014; --panel2:#16161b; --line:#26262b; --line2:#34343b;
+    --ink:#e7e7ea; --mut:#8b8b93; --mut2:#5f5f68; --acc:#3b82f6;
+    --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+    --font:"Inter",-apple-system,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px}
+  .wrap{max-width:1500px;margin:0 auto;padding:14px 18px 40px}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:-.01em}
+  .brand svg{width:22px;height:22px;color:var(--acc)}
+  .brand .sub{color:var(--mut);font-weight:500}
+  .top-right{display:flex;align-items:center;gap:10px}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:5px 11px;
+        border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--mut)}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--mut2)}
+  .pill.ok{color:var(--ok)} .pill.ok .dot{background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.15)}
+  .pill.down{color:var(--bad)} .pill.down .dot{background:var(--bad)}
+  .lnk{font-size:13px;color:var(--mut)} .lnk:hover{color:var(--ink)}
+
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px;
+            background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .ctl{display:flex;flex-direction:column;gap:4px}
+  .ctl label{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  select,input,button{font-family:var(--font);font-size:13px}
+  .in{height:34px;padding:0 10px;background:var(--bg);color:var(--ink);border:1px solid var(--line2);
+      border-radius:7px}
+  .in.mono{font-family:var(--mono);font-size:12px}
+  .btn{height:34px;padding:0 14px;border:1px solid transparent;border-radius:7px;font-weight:600;
+       background:var(--acc);color:#06070a;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .btn.sec{background:var(--panel2);color:var(--ink);border-color:var(--line2)}
+  .btn:disabled{opacity:.55;cursor:default}
+  input[type=file]{display:none}
+  .grow{flex:1;min-width:180px}
+
+  .monitors{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .mon{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
+       display:flex;flex-direction:column}
+  .mon .hd{display:flex;align-items:center;justify-content:space-between;padding:8px 11px;
+           border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .mon .hd .n{font-family:var(--mono);color:var(--mut2)}
+  .stage{position:relative;aspect-ratio:1;background:#000;line-height:0}
+  .stage img{width:100%;height:100%;object-fit:contain;display:block}
+  .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+         color:var(--mut2);font-size:13px}
+  #raw.drag{outline:2px dashed var(--acc);outline-offset:-6px}
+  .boxLayer{position:absolute;inset:0;pointer-events:none}
+  .bbox{position:absolute;border:2px solid var(--bad);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
+  .bbox .lbl{position:absolute;top:-16px;left:-2px;font-family:var(--mono);font-size:10px;font-weight:600;
+             color:#fff;background:var(--bad);padding:0 4px;border-radius:3px;white-space:nowrap}
+
+  .telem{margin-top:12px;background:#0d0d10;border:1px solid var(--line);border-radius:10px;
+         display:flex;align-items:center;gap:20px;padding:14px 18px;flex-wrap:wrap}
+  .status{font-weight:700;font-size:18px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  .status .ic{width:12px;height:12px;border-radius:50%}
+  .status.idle{color:var(--mut)} .status.idle .ic{background:var(--mut2)}
+  .status.ok{color:var(--ok)} .status.ok .ic{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+  .status.bad{color:var(--bad)} .status.bad .ic{background:var(--bad);box-shadow:0 0 12px var(--bad)}
+  .metrics{display:flex;gap:22px;flex-wrap:wrap;margin-left:auto}
+  .metric .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  .metric .v{font-family:var(--mono);font-size:16px;font-weight:500}
+
+  .defects{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 4px 8px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+  th{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  td{font-family:var(--mono);color:var(--ink)} tr:last-child td{border-bottom:none}
+  td.p4{color:var(--bad);font-weight:700} td.p3{color:var(--warn)} td.p2{color:#eab308} td.p1{color:var(--ok)}
+  .hint{color:var(--mut2);font-size:12px;padding:10px 12px}
+
+  @media(max-width:900px){ .monitors{grid-template-columns:1fr} .metrics{margin-left:0} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="4" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+      Fabric Inspect <span class="sub">· Operator</span>
+    </div>
+    <div class="top-right">
+      <span class="pill" id="status"><span class="dot"></span><span id="statusText">checking…</span></span>
+      <a class="lnk" href="app.html">Console</a>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="ctl"><label for="category">Category</label><select class="in" id="category"></select></div>
+    <div class="ctl"><label for="ppm">px / mm</label><input class="in mono" id="ppm" type="number" step="0.1" min="0.1" value="5" style="width:90px"></div>
+    <div class="ctl"><label>Frame</label>
+      <span style="display:flex;gap:8px">
+        <label class="btn sec">Upload<input type="file" id="upload" accept="image/*"></label>
+        <label class="btn sec">Camera<input type="file" id="camera" accept="image/*" capture="environment"></label>
+        <button class="btn sec" id="liveBtn">Live</button>
+      </span>
+    </div>
+    <div class="ctl grow"><label for="endpoint">Backend</label><input class="in mono" id="endpoint" value="http://localhost:8000/predict" spellcheck="false"></div>
+  </div>
+
+  <div class="monitors">
+    <div class="mon"><div class="hd"><span>Raw fabric</span><span class="n">CAM&nbsp;01</span></div>
+      <div class="stage" id="raw"><img id="rawImg" alt=""><div class="empty" id="rawEmpty">drop / upload a frame</div>
+        <video id="video" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;display:none"></video></div></div>
+    <div class="mon"><div class="hd"><span>DINOv3 anomaly heatmap</span><span class="n">AI</span></div>
+      <div class="stage"><img id="heatImg" alt=""><div class="empty" id="heatEmpty">—</div></div></div>
+    <div class="mon"><div class="hd"><span>Localized · typed · graded</span><span class="n">OUT</span></div>
+      <div class="stage"><img id="decImg" alt=""><div class="boxLayer" id="boxLayer"></div><div class="empty" id="decEmpty">—</div></div></div>
+  </div>
+
+  <div class="telem">
+    <div class="status idle" id="statusBig"><span class="ic"></span><span id="statusBigText">IDLE</span></div>
+    <div class="metrics" id="metrics"></div>
+  </div>
+
+  <div class="defects" id="defects"><div class="hint">No frame inspected yet.</div></div>
+
+  <canvas id="canvas" style="display:none"></canvas>
+</div>
+<script src="dashboard.js"></script>
+</body>
+</html>
