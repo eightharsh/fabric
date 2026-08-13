@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src import grading  # noqa: E402
+from src.classifier import DefectClassifier, pool_grid  # noqa: E402
 from src.config import load_config  # noqa: E402
 from src.data.mvtec import build_transform  # noqa: E402
 from src.experiment import pick_device  # noqa: E402
@@ -107,6 +108,17 @@ def get_model(category: str) -> PatchCore:
         _models[category] = model
         _load_error = None
     return model
+
+
+_classifiers: dict[str, DefectClassifier | None] = {}
+
+
+def get_classifier(category: str) -> DefectClassifier | None:
+    """Stage-2 defect-type classifier for a category, if one was trained."""
+    if category not in _classifiers:
+        path = CKPT_DIR / f"{category}_clf.joblib"
+        _classifiers[category] = DefectClassifier.load(str(path)) if path.exists() else None
+    return _classifiers[category]
 
 
 def _threshold(model: PatchCore | None) -> float | None:
@@ -233,6 +245,21 @@ async def predict(
         for b in boxes:
             b["size_mm"] = round(grading.box_size_mm(b["w"], b["h"], ppm), 1)
             b["points"] = grading.defect_points(b["size_mm"])
+        # Stage 2: name each defect via a linear probe on the DINOv3 features
+        # pooled over the box region (only if a classifier exists for this category).
+        clf = get_classifier(category)
+        if clf is not None and boxes:
+            grid = model.backbone(tensor.to(model.device))[0].cpu().numpy()  # (C, gh, gw)
+            gh, gw = grid.shape[1:]
+            for b in boxes:
+                gx0 = int(b["x"] * gw / IMAGE_SIZE)
+                gy0 = int(b["y"] * gh / IMAGE_SIZE)
+                gx1 = max(gx0 + 1, int((b["x"] + b["w"]) * gw / IMAGE_SIZE))
+                gy1 = max(gy0 + 1, int((b["y"] + b["h"]) * gh / IMAGE_SIZE))
+                m = np.zeros((gh, gw), dtype=np.float32)
+                m[gy0:gy1, gx0:gx1] = 1.0
+                b["type"], conf = clf.predict_label(pool_grid(grid, m))
+                b["type_conf"] = round(conf, 2)
         boxed = viz.draw_boxes(heat, boxes)       # heatmap + boxes (legacy combined view)
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)
     except Exception as e:  # noqa: BLE001 -- inference failure -> clean 500

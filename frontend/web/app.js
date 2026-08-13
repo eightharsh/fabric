@@ -212,11 +212,16 @@ function renderResult(d) {
   setView(hasLayers ? "boxes" : "combined");
 
   if (d.boxes && d.boxes.length) {
+    const typed = d.boxes.some((b) => b.type);
     let t = "<div class='boxes-title'>Defects (ASTM D5430 4-Point)</div><table class='data'>" +
-      "<tr><th>#</th><th>size (mm)</th><th>points</th><th>score</th></tr>";
+      `<tr><th>#</th>${typed ? "<th>type</th>" : ""}<th>size (mm)</th><th>points</th><th>score</th></tr>`;
     d.boxes.forEach((b, i) => {
-      t += `<tr><td>${i + 1}</td><td>${b.size_mm ?? "—"}</td>` +
-        `<td>${b.points ?? "—"}</td><td>${Number(b.score).toFixed(2)}</td></tr>`;
+      const type = b.type
+        ? `${b.type} <span class="muted">${Math.round((b.type_conf || 0) * 100)}%</span>`
+        : "—";
+      t += `<tr><td>${i + 1}</td>${typed ? `<td>${type}</td>` : ""}` +
+        `<td>${b.size_mm ?? "—"}</td><td>${b.points ?? "—"}</td>` +
+        `<td>${Number(b.score).toFixed(2)}</td></tr>`;
     });
     $("boxWrap").innerHTML = t + "</table>";
   } else $("boxWrap").innerHTML = "";
