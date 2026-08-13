@@ -4,85 +4,96 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Operator Dashboard — Fabric Inspect</title>
-<meta name="color-scheme" content="dark" />
+<meta name="color-scheme" content="light" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
-  /* dark control-room surface (distinct from the light customer app) */
   :root{
-    --bg:#08080a; --panel:#101014; --panel2:#16161b; --line:#26262b; --line2:#34343b;
-    --ink:#e7e7ea; --mut:#8b8b93; --mut2:#5f5f68; --acc:#3b82f6;
-    --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+    --bg:#f6f7f9; --card:#ffffff; --soft:#f4f4f5; --line:#e4e4e7; --line2:#d4d4d8;
+    --ink:#18181b; --mut:#52525b; --mut2:#9a9aa2; --acc:#2563eb;
+    --ok:#15803d; --ok-w:#dcfce7; --bad:#dc2626; --bad-w:#fee2e2; --warn:#b45309;
+    --well:#0e0f12;
     --font:"Inter",-apple-system,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+    --sh:0 1px 2px rgba(24,24,27,.04),0 4px 14px rgba(24,24,27,.06);
+    --r:12px;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px}
-  .wrap{max-width:1500px;margin:0 auto;padding:14px 18px 40px}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1500px;margin:0 auto;padding:16px 20px 48px}
   a{color:inherit;text-decoration:none}
   .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
-  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:-.01em}
+  /* top bar */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;letter-spacing:-.01em}
   .brand svg{width:22px;height:22px;color:var(--acc)}
   .brand .sub{color:var(--mut);font-weight:500}
   .top-right{display:flex;align-items:center;gap:10px}
-  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:5px 11px;
-        border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--mut)}
+  .pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;padding:6px 12px;
+        border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--mut)}
   .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--mut2)}
-  .pill.ok{color:var(--ok)} .pill.ok .dot{background:var(--ok);box-shadow:0 0 0 3px rgba(34,197,94,.15)}
-  .pill.down{color:var(--bad)} .pill.down .dot{background:var(--bad)}
-  .lnk{font-size:13px;color:var(--mut)} .lnk:hover{color:var(--ink)}
+  .pill.ok{color:var(--ok);border-color:#bbf7d0} .pill.ok .dot{background:var(--ok);box-shadow:0 0 0 3px var(--ok-w)}
+  .pill.down{color:var(--bad);border-color:#fecaca} .pill.down .dot{background:var(--bad)}
+  .lnk{font-size:13.5px;color:var(--mut);font-weight:500;padding:6px 10px;border-radius:8px} .lnk:hover{color:var(--ink);background:var(--soft)}
 
-  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:14px;
-            background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
-  .ctl{display:flex;flex-direction:column;gap:4px}
-  .ctl label{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:16px;
+            background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;box-shadow:var(--sh)}
+  .ctl{display:flex;flex-direction:column;gap:5px}
+  .ctl label{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
   select,input,button{font-family:var(--font);font-size:13px}
-  .in{height:34px;padding:0 10px;background:var(--bg);color:var(--ink);border:1px solid var(--line2);
-      border-radius:7px}
-  .in.mono{font-family:var(--mono);font-size:12px}
-  .btn{height:34px;padding:0 14px;border:1px solid transparent;border-radius:7px;font-weight:600;
-       background:var(--acc);color:#06070a;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
-  .btn.sec{background:var(--panel2);color:var(--ink);border-color:var(--line2)}
+  .in{height:36px;padding:0 11px;background:var(--card);color:var(--ink);border:1px solid var(--line2);border-radius:8px}
+  .in:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .in.mono{font-family:var(--mono);font-size:12.5px}
+  .btn{height:36px;padding:0 15px;border:1px solid var(--line2);border-radius:8px;font-weight:600;
+       background:var(--card);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{background:var(--soft)}
+  .btn.pri{background:var(--acc);color:#fff;border-color:transparent} .btn.pri:hover{background:#1d4ed8}
   .btn:disabled{opacity:.55;cursor:default}
   input[type=file]{display:none}
-  .grow{flex:1;min-width:180px}
+  .grow{flex:1;min-width:200px}
 
-  .monitors{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-  .mon{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;
-       display:flex;flex-direction:column}
-  .mon .hd{display:flex;align-items:center;justify-content:space-between;padding:8px 11px;
-           border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
-  .mon .hd .n{font-family:var(--mono);color:var(--mut2)}
-  .stage{position:relative;aspect-ratio:1;background:#000;line-height:0}
-  .stage img{width:100%;height:100%;object-fit:contain;display:block}
+  /* monitors */
+  .monitors{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .mon{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+  .mon .hd{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
+           border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+           color:var(--mut);font-weight:600}
+  .mon .hd .n{font-family:var(--mono);color:var(--mut2);letter-spacing:.04em}
+  /* robust square stage: image + box overlay fill the same square exactly */
+  .stage{position:relative;aspect-ratio:1;background:var(--well);overflow:hidden}
+  .stage img,.stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
   .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-         color:var(--mut2);font-size:13px}
-  #raw.drag{outline:2px dashed var(--acc);outline-offset:-6px}
-  .boxLayer{position:absolute;inset:0;pointer-events:none}
-  .bbox{position:absolute;border:2px solid var(--bad);border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
-  .bbox .lbl{position:absolute;top:-16px;left:-2px;font-family:var(--mono);font-size:10px;font-weight:600;
-             color:#fff;background:var(--bad);padding:0 4px;border-radius:3px;white-space:nowrap}
+         color:var(--mut2);font-size:13px;text-align:center;padding:16px}
+  #raw.drag{outline:2px dashed var(--acc);outline-offset:-8px}
+  .boxLayer{position:absolute;inset:0;pointer-events:none;z-index:2}
+  .bbox{position:absolute;border:2px solid var(--bad);border-radius:2px;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+  .bbox .lbl{position:absolute;top:-17px;left:-2px;font-family:var(--mono);font-size:10px;font-weight:600;
+             color:#fff;background:var(--bad);padding:1px 5px;border-radius:3px;white-space:nowrap}
 
-  .telem{margin-top:12px;background:#0d0d10;border:1px solid var(--line);border-radius:10px;
-         display:flex;align-items:center;gap:20px;padding:14px 18px;flex-wrap:wrap}
-  .status{font-weight:700;font-size:18px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
-  .status .ic{width:12px;height:12px;border-radius:50%}
-  .status.idle{color:var(--mut)} .status.idle .ic{background:var(--mut2)}
-  .status.ok{color:var(--ok)} .status.ok .ic{background:var(--ok);box-shadow:0 0 12px var(--ok)}
-  .status.bad{color:var(--bad)} .status.bad .ic{background:var(--bad);box-shadow:0 0 12px var(--bad)}
-  .metrics{display:flex;gap:22px;flex-wrap:wrap;margin-left:auto}
-  .metric .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
-  .metric .v{font-family:var(--mono);font-size:16px;font-weight:500}
+  /* telemetry */
+  .telem{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+         display:flex;align-items:center;gap:20px;padding:16px 20px;flex-wrap:wrap;box-shadow:var(--sh)}
+  .status{font-weight:700;font-size:19px;letter-spacing:.01em;display:flex;align-items:center;gap:11px;
+          padding:8px 16px;border-radius:999px}
+  .status .ic{width:11px;height:11px;border-radius:50%}
+  .status.idle{color:var(--mut);background:var(--soft)} .status.idle .ic{background:var(--mut2)}
+  .status.ok{color:var(--ok);background:var(--ok-w)} .status.ok .ic{background:var(--ok)}
+  .status.bad{color:var(--bad);background:var(--bad-w)} .status.bad .ic{background:var(--bad);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .metrics{display:flex;gap:26px;flex-wrap:wrap;margin-left:auto}
+  .metric .k{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+  .metric .v{font-family:var(--mono);font-size:16px;font-weight:500;margin-top:2px}
 
-  .defects{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 4px 8px}
+  /* defects */
+  .defects{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
   table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
-  th{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
   td{font-family:var(--mono);color:var(--ink)} tr:last-child td{border-bottom:none}
-  td.p4{color:var(--bad);font-weight:700} td.p3{color:var(--warn)} td.p2{color:#eab308} td.p1{color:var(--ok)}
-  .hint{color:var(--mut2);font-size:12px;padding:10px 12px}
+  td.p4{color:var(--bad);font-weight:700} td.p3{color:var(--warn)} td.p2{color:#a16207} td.p1{color:var(--ok)}
+  .hint{color:var(--mut2);font-size:12.5px;padding:14px}
 
   @media(max-width:900px){ .monitors{grid-template-columns:1fr} .metrics{margin-left:0} }
 </style>
@@ -97,17 +108,18 @@
     <div class="top-right">
       <span class="pill" id="status"><span class="dot"></span><span id="statusText">checking…</span></span>
       <a class="lnk" href="app.html">Console</a>
+      <a class="lnk" href="index.html">Home</a>
     </div>
   </div>
 
   <div class="controls">
     <div class="ctl"><label for="category">Category</label><select class="in" id="category"></select></div>
-    <div class="ctl"><label for="ppm">px / mm</label><input class="in mono" id="ppm" type="number" step="0.1" min="0.1" value="5" style="width:90px"></div>
-    <div class="ctl"><label>Frame</label>
+    <div class="ctl"><label for="ppm">px / mm</label><input class="in mono" id="ppm" type="number" step="0.1" min="0.1" value="5" style="width:96px"></div>
+    <div class="ctl"><label>Frame source</label>
       <span style="display:flex;gap:8px">
-        <label class="btn sec">Upload<input type="file" id="upload" accept="image/*"></label>
-        <label class="btn sec">Camera<input type="file" id="camera" accept="image/*" capture="environment"></label>
-        <button class="btn sec" id="liveBtn">Live</button>
+        <label class="btn pri">Upload<input type="file" id="upload" accept="image/*"></label>
+        <label class="btn">Camera<input type="file" id="camera" accept="image/*" capture="environment"></label>
+        <button class="btn" id="liveBtn">Live</button>
       </span>
     </div>
     <div class="ctl grow"><label for="endpoint">Backend</label><input class="in mono" id="endpoint" value="http://localhost:8000/predict" spellcheck="false"></div>
@@ -115,8 +127,11 @@
 
   <div class="monitors">
     <div class="mon"><div class="hd"><span>Raw fabric</span><span class="n">CAM&nbsp;01</span></div>
-      <div class="stage" id="raw"><img id="rawImg" alt=""><div class="empty" id="rawEmpty">drop / upload a frame</div>
-        <video id="video" playsinline autoplay muted style="width:100%;height:100%;object-fit:cover;display:none"></video></div></div>
+      <div class="stage" id="raw">
+        <img id="rawImg" alt="">
+        <video id="video" playsinline autoplay muted style="display:none"></video>
+        <div class="empty" id="rawEmpty">drop, upload, or paste a frame</div>
+      </div></div>
     <div class="mon"><div class="hd"><span>DINOv3 anomaly heatmap</span><span class="n">AI</span></div>
       <div class="stage"><img id="heatImg" alt=""><div class="empty" id="heatEmpty">—</div></div></div>
     <div class="mon"><div class="hd"><span>Localized · typed · graded</span><span class="n">OUT</span></div>
