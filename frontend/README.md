@@ -1,14 +1,24 @@
 # Frontend
 
-A single responsive web client (`web/index.html`) that works on **both desktop
-and phone** browsers. It uploads a fabric image to the backend `/predict`
-endpoint and shows the verdict, anomaly score, and inference time, plus a result
-view with an **Original / Heatmap / Boxes** toggle (defaults to Boxes on the
-clean photo; boxes are drawn client-side from the returned coords). Provide an
-image by **Camera**, **Gallery**, **Live camera**, **drag-and-drop**, or
-**paste** (Ctrl/⌘+V). On phones the **📷 Camera** button opens the rear camera
-directly. The endpoint you set is remembered on the device, and dark mode
-follows the OS/browser theme.
+A static, responsive web client (no build step) with a **minimal / technical**
+design, split the way a product usually is:
+
+| File | Role |
+|---|---|
+| `web/index.html` | **Landing page** — hero, pipeline schematic, how-it-works, "Launch app" |
+| `web/app.html` | **Inspection console** — the actual tool |
+| `web/app.js` | Console logic (health, upload/analyze, result rendering, view toggle) |
+| `web/styles.css` | Shared design system + tokens (light + dark) |
+
+The console uploads a fabric image to the backend `/predict` endpoint and shows
+the **verdict**, stat tiles (anomaly score, threshold, regions, latency), and a
+result view with an **Original / Heatmap / Boxes** toggle (defaults to Boxes on
+the clean photo; boxes are drawn client-side from the returned coords so they
+stay crisp). Provide an image by **Upload**, **Camera**, **Live camera**,
+**drag-and-drop**, or **paste** (⌘/Ctrl+V). On phones the **Camera** button
+opens the rear camera directly. The endpoint you set is remembered on the
+device. Theme follows the OS by default with a manual light/dark toggle in the
+nav; both are honoured across the app.
 
 ## Run it
 It's a static file — no build step.

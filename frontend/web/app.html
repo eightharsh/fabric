@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Inspector — Fabric Inspect</title>
+<meta name="color-scheme" content="light" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .app-main { padding: var(--s-6) 0 var(--s-8); }
+  .app-grid { display: grid; grid-template-columns: 380px 1fr; gap: var(--s-5); align-items: start; }
+  .pane { padding: var(--s-5); }
+  .pane-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-4); }
+  .pane-head h2 { font-size: 16px; }
+
+  .source-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s-2); }
+  .source-row .btn { padding: 0 8px; }
+  .source-row .btn svg { width: 15px; height: 15px; }
+  input[type=file] { display: none; }
+
+  .dropzone { margin-top: var(--s-4); border: 1.5px dashed var(--border-strong); border-radius: var(--r-lg); background: var(--surface-2); transition: border-color .14s, background .14s; }
+  .dropzone.drag { border-color: var(--accent); background: var(--accent-weak); }
+  .dz-empty { padding: var(--s-7) var(--s-5); text-align: center; }
+  .dz-empty .ic { width: 42px; height: 42px; border-radius: var(--r); background: var(--bg); border: 1px solid var(--border); color: var(--text-3); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--s-3); }
+  .dz-empty .ic svg { width: 20px; height: 20px; }
+  .dz-empty h3 { font-size: 14px; }
+  .dz-empty p { font-size: 12.5px; color: var(--text-3); margin-top: 4px; }
+  .dz-body { padding: var(--s-3); }
+  .dz-body img.preview, .dz-body video { width: 100%; display: block; border-radius: var(--r); border: 1px solid var(--border); background: #000; }
+  .dz-body video { aspect-ratio: 4/3; object-fit: cover; }
+  .dz-actions { display: flex; gap: var(--s-2); margin-top: var(--s-3); }
+
+  .endpoint { margin-top: var(--s-4); padding-top: var(--s-4); border-top: 1px solid var(--border); }
+
+  /* result pane states */
+  .state-center { min-height: 380px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: var(--s-6); }
+  .state-center .ic { width: 46px; height: 46px; border-radius: var(--r); background: var(--surface-2); border: 1px solid var(--border); color: var(--text-3); display: flex; align-items: center; justify-content: center; margin-bottom: var(--s-3); }
+  .state-center .ic svg { width: 22px; height: 22px; }
+  .state-center h3 { font-size: 15px; }
+  .state-center p { font-size: 13px; color: var(--text-3); margin-top: 5px; max-width: 34ch; }
+
+  .result-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); flex-wrap: wrap; }
+  .stats { grid-template-columns: repeat(4, 1fr); margin-bottom: var(--s-4); }
+  .view-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s-3); }
+  .view-bar .label { margin: 0; }
+  .result-stage-wrap { max-width: 560px; margin: 0 auto; }
+  .boxes-title { font-size: 12px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--s-4) 0 var(--s-2); }
+
+  .sk-row { display: grid; grid-template-columns: repeat(4,1fr); gap: var(--s-2); margin-bottom: var(--s-4); }
+  .sk-tile { height: 62px; }
+  .sk-img { height: 300px; }
+
+  @media (max-width: 860px) {
+    .app-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .sk-row { grid-template-columns: repeat(2,1fr); }
+    .nav-links .desk { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="index.html" aria-label="Fabric Inspect home">
+      <svg class="logo" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="19" height="19" rx="4" stroke="currentColor" stroke-width="1.6"/>
+        <rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/>
+      </svg>
+      Fabric Inspect
+    </a>
+    <div class="nav-links">
+      <span class="pill" id="status"><span class="dot"></span><span id="statusText">checking…</span></span>
+      <a class="nav-link" href="index.html">Home</a>
+    </div>
+  </div>
+</nav>
+
+<main class="container app-main">
+  <div class="app-grid">
+
+    <!-- ── Input pane ─────────────────────────────────────────────── -->
+    <section class="panel pane" aria-label="Inspection input">
+      <div class="pane-head"><h2>New inspection</h2></div>
+
+      <div class="source-row">
+        <label class="btn secondary">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4M8 8l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          Upload<input type="file" id="upload" accept="image/*" />
+        </label>
+        <label class="btn secondary">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.5l1-1.5h5l1 1.5H20a2 2 0 012 2v9a2 2 0 01-2 2H4a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="12.5" r="3.2" stroke="currentColor" stroke-width="1.6"/></svg>
+          Camera<input type="file" id="camera" accept="image/*" capture="environment" />
+        </label>
+        <button class="btn secondary" id="liveBtn">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="2.5" y="6" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M15.5 10l6-3v10l-6-3v-4z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          Live
+        </button>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <!-- empty -->
+        <div class="dz-empty" id="dzEmpty">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none"><path d="M4 14v3a2 2 0 002 2h12a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12 15V4M8 8l4-4 4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Drop a fabric image here</h3>
+          <p>or use Upload / Camera / Live above — you can also paste with <span class="kbd">⌘V</span></p>
+        </div>
+        <!-- preview -->
+        <div class="dz-body hide" id="dzPreview">
+          <img class="preview" id="preview" alt="selected fabric" />
+          <div class="dz-actions">
+            <button class="btn block" id="analyze">Analyze</button>
+            <button class="icon-btn" id="clearPreview" title="Clear" aria-label="Clear image">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <!-- live -->
+        <div class="dz-body hide" id="dzLive">
+          <video id="video" playsinline autoplay muted></video>
+          <div class="dz-actions">
+            <button class="btn block" id="capture">Capture &amp; analyze</button>
+            <button class="btn secondary" id="stopCam">Stop</button>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="liveHint"></p>
+      <canvas id="canvas" class="hide"></canvas>
+
+      <div class="endpoint">
+        <label class="label" for="endpoint">Backend endpoint</label>
+        <input class="input" id="endpoint" value="http://localhost:8000/predict" spellcheck="false" />
+        <p class="hint">Auto-set to this page's host and remembered on this device. Change it
+          only for a Colab / ngrok URL or another machine.</p>
+      </div>
+    </section>
+
+    <!-- ── Result pane ────────────────────────────────────────────── -->
+    <section class="panel pane" id="resultPane" aria-label="Inspection result">
+      <!-- empty -->
+      <div class="state-center" id="stateEmpty">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.7"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+        <h3>No inspection yet</h3>
+        <p>Pick or drop a fabric image, then Analyze. The verdict, heatmap, and boxes appear here.</p>
+      </div>
+
+      <!-- loading -->
+      <div class="hide" id="stateLoading">
+        <div class="result-head"><div class="skeleton" style="width:150px;height:34px;border-radius:var(--r-pill)"></div></div>
+        <div class="sk-row"><div class="skeleton sk-tile"></div><div class="skeleton sk-tile"></div><div class="skeleton sk-tile"></div><div class="skeleton sk-tile"></div></div>
+        <div class="skeleton sk-img"></div>
+      </div>
+
+      <!-- error -->
+      <div class="state-center hide" id="stateError">
+        <div class="ic" style="color:var(--danger);border-color:color-mix(in srgb,var(--danger) 30%,var(--border))"><svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M10.3 3.9L2.7 17a2 2 0 001.7 3h15.2a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+        <h3>Request failed</h3>
+        <p id="errorMsg" style="max-width:40ch"></p>
+      </div>
+
+      <!-- result -->
+      <div class="hide" id="stateResult">
+        <div class="result-head">
+          <span class="verdict" id="verdict"></span>
+          <span class="mono muted" id="latencyTag" style="font-size:12.5px"></span>
+        </div>
+        <div class="stats" id="stats"></div>
+        <div class="result-stage-wrap">
+          <div class="view-bar">
+            <span class="label">Result</span>
+            <div class="segmented" id="viewTabs" role="tablist" aria-label="Result view">
+              <button data-view="original" role="tab">Original</button>
+              <button data-view="heatmap" role="tab">Heatmap</button>
+              <button data-view="boxes" class="active" role="tab" aria-selected="true">Boxes</button>
+            </div>
+          </div>
+          <div class="stage" id="stage">
+            <img id="overlay" alt="inspection result" />
+            <div class="box-layer" id="boxLayer"></div>
+          </div>
+          <div id="boxWrap"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
