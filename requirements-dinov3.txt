@@ -1,0 +1,17 @@
+# Extra dependencies for the DINOv3 backbone (src/models/dinov3_backbone.py).
+# Kept separate so the DINOv2 / WideResNet path stays lightweight.
+#
+#   pip install -r requirements-dinov3.txt
+#
+# The DINOv3 checkpoints are GATED. Before first use:
+#   1. Accept the licence at
+#      https://huggingface.co/facebook/dinov3-vitl16-pretrain-lvd1689m
+#   2. Create a token at https://huggingface.co/settings/tokens
+#   3. export HF_TOKEN=hf_xxx        (or HUGGINGFACE_HUB_TOKEN)
+#
+# transformers gained DINOv3 support in 4.56; on Kaggle a recent transformers is
+# already installed, so you usually don't need to install anything there.
+-r requirements.txt
+transformers>=4.56
+safetensors>=0.4
+huggingface_hub>=0.24

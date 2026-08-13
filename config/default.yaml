@@ -5,13 +5,18 @@
 seed: 0                        # global RNG seed (torch + numpy + coreset)
 
 data:
-  root: /content/mvtec        # where MVTec AD is extracted
+  root: /content/mvtec        # where MVTec AD is extracted (override: --data-root / DATASET_PATH)
   category: carpet            # textile-like: carpet | leather | grid
-  image_size: 224            # must be divisible by 14 (DINOv2 patch size)
+  image_size: 224            # divisible by 14 (DINOv2) AND 16 (DINOv3): 224/14=16, 224/16=14
 
 model:
-  backbone: dinov2_vits14    # vits14 (Colab-safe) | vitb14 | wide_resnet50_2 (baseline)
-  layers: [9]                # transformer block(s) to pull patch tokens from
+  # Migration target. DINOv3 needs `pip install -r requirements-dinov3.txt` + a
+  # Hugging Face token (gated). DINOv2 stays available for the A/B comparison.
+  #   dinov3: dinov3_vits16 | dinov3_vitb16 | dinov3_vitl16 | dinov3_vith16plus
+  #   dinov2: dinov2_vits14 | dinov2_vitb14 | dinov2_vitl14
+  #   cnn   : wide_resnet50_2 (baseline)
+  backbone: dinov3_vitl16
+  layers: [9]                # DINOv2 block index; ignored for DINOv3 (uses final patch features)
   coreset_ratio: 0.10        # fraction of normal patches kept in memory bank
   n_neighbors: 1             # k in nearest-neighbour scoring
   agg_kernel: 3              # local-aggregation neighbourhood

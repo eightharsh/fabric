@@ -1,4 +1,4 @@
-# Fabric Defect Detection (DINOv2 + PatchCore)
+# Fabric Defect Detection (DINOv2 / DINOv3 + PatchCore)
 
 Unsupervised fabric defect detection: train **only on defect-free fabric**, then
 flag anything that looks different. Outputs an anomaly score, a heatmap of the
@@ -6,6 +6,10 @@ damaged area, and bounding-box coordinates — with no defect labels required.
 
 > College project + research paper. ML trains on Google Colab; the app runs
 > as a FastAPI backend with phone + desktop clients.
+
+The feature backbone is swappable — **DINOv2**, **DINOv3**, or a WideResNet CNN —
+behind a single PatchCore pipeline. See [`MIGRATION.md`](MIGRATION.md) for the
+DINOv2 → DINOv3 migration (and the A/B comparison).
 
 ## How it works
 ```
@@ -24,15 +28,19 @@ boxes come from thresholding that map (no trained detector).
 ```
 config/default.yaml     experiment settings — the single source of truth
 src/config.py           loads default.yaml; CLI flags override it
-src/models/             DINOv2 backbone + PatchCore
+src/models/             backbones (dinov2 / dinov3 / wideresnet) + PatchCore
+src/experiment.py       shared fit → evaluate → log pipeline
 src/data/mvtec.py       MVTec AD loader (train/good only for fitting)
 src/utils/              metrics (AUROC, PRO) + heatmap/box visualization
 scripts/train.py        fit memory bank on one category, evaluate, save, log CSV
+scripts/run_experiments.py   backbone comparison sweep -> results.csv
+scripts/validate_backbone.py 9-point sanity check for any backbone
 scripts/calibrate.py    pick the pass/fail threshold + heatmap bounds
 backend/main.py         FastAPI /predict server
-frontend/web/           responsive desktop + phone client (index.html)
+frontend/web/           landing (index.html) + inspection console (app.html)
 tests/                  pytest smoke tests (metrics, boxes, coreset, IO, config)
 paper/outline.md        paper structure + target venues
+MIGRATION.md            DINOv2 → DINOv3 migration guide + A/B comparison
 ```
 
 All hyperparameters live in `config/default.yaml`; every CLI flag defaults to it,
@@ -53,6 +61,12 @@ row to `outputs/results.csv` (your paper table), and writes overlays to
 `outputs/`. Flags (`--model`, `--coreset`, `--image-size`, `--seed`, …) override
 `config/default.yaml`. On Colab, save `checkpoints/` to Drive so a disconnect
 doesn't lose the fitted bank.
+
+**Backbone selection** — pass `--model`:
+`dinov2_vits14|vitb14|vitl14`, `dinov3_vits16|vitb16|vitl16|vith16plus`, or
+`wide_resnet50_2`. DINOv3 needs `pip install -r requirements-dinov3.txt` and a
+Hugging Face token for the gated weights — see [`MIGRATION.md`](MIGRATION.md).
+Validate any backbone first: `python scripts/validate_backbone.py --model <name> --data-root <root> --category carpet`.
 
 ### Colab tips
 - Use `dinov2_vits14` (ViT-S). Avoid vitl/vitg — the memory bank won't fit.
@@ -117,6 +131,7 @@ pytest
 ## Roadmap
 - [x] Phase 1 — DINOv2 + PatchCore baseline on MVTec
 - [x] Phase 2 — heatmap + bounding boxes + threshold calibration (`scripts/calibrate.py`)
-- [ ] Phase 3 — paper experiment: DINOv2 vs WideResNet + ablations (log to `outputs/results.csv`)
+- [ ] Phase 3 — paper experiment: DINOv2 vs DINOv3 vs WideResNet + ablations (`outputs/results.csv`)
 - [x] Phase 4 — web frontend (responsive desktop + phone); native wrapper later
-- [ ] Phase 5 — write the paper (see `paper/outline.md`)
+- [x] Phase 5 — DINOv3 ViT-L/16 backbone migration (see `MIGRATION.md`)
+- [ ] Phase 6 — write the paper (see `paper/outline.md`)

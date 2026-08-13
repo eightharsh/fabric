@@ -23,8 +23,15 @@ from src.constants import IMAGENET_MEAN, IMAGENET_STD
 
 
 def build_transform(image_size: int = 224):
-    """Resize to a multiple of 14 (DINOv2 patch size). 224 = 16x16 grid."""
-    assert image_size % 14 == 0, "image_size must be divisible by 14 for DINOv2"
+    """Resize to a square multiple of the backbone's patch size.
+
+    DINOv2 uses patch 14, DINOv3 uses patch 16 -- the default 224 is divisible by
+    both (224/14=16, 224/16=14), so the same resolution feeds either backbone.
+    The backbone raises a precise error if the grid ever mismatches.
+    """
+    assert (
+        image_size % 14 == 0 or image_size % 16 == 0
+    ), "image_size must be divisible by 14 (DINOv2) or 16 (DINOv3); 224 satisfies both"
     return transforms.Compose(
         [
             transforms.Resize((image_size, image_size)),

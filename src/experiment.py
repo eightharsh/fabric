@@ -159,12 +159,15 @@ def run_experiment(
     log(f"PRO         : {pro:.4f}")
 
     # actual layers used (correct even when `layers` was None -> backbone default)
-    used_layers = "|".join(map(str, backbone.layers))
+    used_layers = "|".join(map(str, backbone.layers)) or "final"
+    gh, gw = model.grid_size
     row = {
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "category": category,
         "backbone": model_name,
         "layers": used_layers,
+        "feature_dim": int(backbone.out_dim),        # DINOv2 384 vs DINOv3-L 1024, etc.
+        "patch_tokens": int(gh * gw),                # tokens/image = grid area
         "image_size": image_size,
         "coreset_ratio": cfg.model.coreset_ratio,
         "n_neighbors": cfg.model.n_neighbors,
@@ -187,7 +190,24 @@ def run_experiment(
         _write_overlays(Path(vis_dir), category, imgs, maps, scores, cfg)
         log(f"wrote {cfg.train.n_vis} overlays to {vis_dir}")
 
+    # Release the (possibly large) backbone + bank so the next run in a sweep
+    # starts from a clean slate -- never hold two big DINO models at once.
+    del model, backbone
+    _release_memory(device)
     return row
+
+
+def _release_memory(device: str) -> None:
+    import gc
+
+    gc.collect()
+    try:
+        if device == "cuda":
+            torch.cuda.empty_cache()
+        elif device == "mps":
+            torch.mps.empty_cache()
+    except Exception:  # noqa: BLE001 - best effort
+        pass
 
 
 def _write_overlays(out_dir: Path, category: str, imgs, maps, scores, cfg) -> None:
