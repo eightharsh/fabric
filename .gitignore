@@ -23,6 +23,7 @@ venv/
 /data/
 /mvtec/
 *.pt
+*.joblib
 *.bak
 outputs/*.png
 outputs/*.csv
