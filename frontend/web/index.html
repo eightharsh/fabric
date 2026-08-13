@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Fabric Defect Inspector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ── Cal.com-inspired design system ─────────────────────────────────── */
+  :root {
+    /* colors */
+    --primary:#111111; --primary-active:#242424; --primary-disabled:#e5e7eb;
+    --ink:#111111; --body:#374151; --muted:#6b7280; --muted-soft:#898989;
+    --hairline:#e5e7eb; --hairline-soft:#f3f4f6;
+    --canvas:#ffffff; --surface-soft:#f8f9fa; --surface-card:#f5f5f5;
+    --surface-strong:#e5e7eb; --surface-dark:#101010; --surface-dark-elevated:#1a1a1a;
+    --on-primary:#ffffff; --on-dark:#ffffff; --on-dark-soft:#a1a1aa;
+    --brand-accent:#3b82f6; --success:#10b981; --warning:#f59e0b; --error:#ef4444;
+    --badge-orange:#fb923c; --badge-pink:#ec4899; --badge-violet:#8b5cf6; --badge-emerald:#34d399;
+    /* radius */
+    --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px; --r-pill:9999px;
+    /* spacing */
+    --s-xxs:4px; --s-xs:8px; --s-sm:12px; --s-md:16px; --s-lg:24px; --s-xl:32px; --s-xxl:48px; --s-section:96px;
+    /* fonts */
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    color-scheme: light dark;   /* let native controls follow the OS theme */
+  }
+  /* Dark theme: follow the OS/browser preference by remapping the tokens above. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --primary:#f5f5f5; --primary-active:#e5e5e5; --primary-disabled:#2a2a2a;
+      --ink:#f4f4f5; --body:#c9cdd3; --muted:#9aa0a6; --muted-soft:#6b7075;
+      --hairline:#2a2b2e; --hairline-soft:#1c1d20;
+      --canvas:#0c0d0f; --surface-soft:#141518; --surface-card:#16181b;
+      --surface-strong:#26282c; --surface-dark:#000000; --surface-dark-elevated:#161616;
+      --on-primary:#0c0d0f; --on-dark:#ffffff; --on-dark-soft:#a1a1aa;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .status-pill.ok { color:#34d399; }
+    .status-pill.down { color:#f87171; }
+    .verdict.ok  { color:#34d399; }
+    .verdict.bad { color:#f87171; }
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin:0; background:var(--canvas); color:var(--body);
+    font-family:var(--font); font-size:16px; line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* Cal Sans substitute: Inter 600 + negative tracking on display */
+  .display { font-weight:600; color:var(--ink); letter-spacing:-0.04em; line-height:1.1; margin:0; }
+  .d-xl { font-size:clamp(40px, 6vw, 64px); line-height:1.05; letter-spacing:-2px; }
+  .d-lg { font-size:clamp(32px, 4.5vw, 48px); letter-spacing:-1.5px; }
+  .d-md { font-size:36px; line-height:1.15; letter-spacing:-1px; }
+  .d-sm { font-size:28px; line-height:1.2; letter-spacing:-0.5px; }
+  .mono { font-family:var(--mono); }
+  a { color:var(--ink); text-decoration:none; }
+
+  /* ── Top nav ─────────────────────────────────────────────────────────── */
+  .nav {
+    height:64px; background:var(--canvas); border-bottom:1px solid var(--hairline-soft);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 var(--s-lg); position:sticky; top:0; z-index:20;
+  }
+  .wordmark { font-weight:600; color:var(--ink); font-size:15px; letter-spacing:-0.02em; }
+  .nav-right { display:flex; align-items:center; gap:var(--s-md); }
+  .nav-link { font-size:14px; font-weight:500; color:var(--muted); }
+  .nav-link:hover { color:var(--ink); }
+  .status-pill {
+    display:inline-flex; align-items:center; font-size:13px; font-weight:500;
+    color:var(--muted); background:var(--surface-soft); padding:6px 12px; border-radius:var(--r-pill);
+  }
+  .status-pill.ok { color:#0f7a5a; }
+  .status-pill.down { color:#b42318; }
+
+  .wrap { max-width:1200px; margin:0 auto; padding:0 var(--s-lg); }
+
+  /* ── Hero ────────────────────────────────────────────────────────────── */
+  .hero { display:grid; grid-template-columns:5fr 6fr; gap:var(--s-xxl); align-items:center;
+          padding:var(--s-section) 0 64px; }
+  .hero .eyebrow {
+    display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:500;
+    color:var(--ink); background:var(--surface-card); padding:5px 12px; border-radius:var(--r-pill);
+    margin-bottom:var(--s-md);
+  }
+  .hero p.lead { font-size:18px; color:var(--muted); max-width:44ch; margin:var(--s-md) 0 0; }
+
+  /* hero-app-mockup-card — the real product UI as the hero artifact */
+  .app-card {
+    background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-xl);
+    box-shadow:var(--shadow-md); padding:var(--s-lg); overflow:hidden;
+    transition:border-color .12s ease, box-shadow .12s ease;
+  }
+  .app-card.drag { border-color:var(--brand-accent); box-shadow:0 0 0 3px rgba(59,130,246,.18); }
+  .app-card .head { display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--s-md); }
+  .app-card .head h3 { margin:0; font-size:16px; font-weight:600; color:var(--ink); letter-spacing:-0.01em; }
+  .app-card .head .cat { font-size:13px; font-weight:500; color:var(--muted); }
+
+  .btn-row { display:flex; gap:var(--s-sm); }
+  .btn, label.btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    height:40px; padding:0 20px; border-radius:var(--r-md); border:1px solid transparent;
+    font-family:var(--font); font-size:14px; font-weight:600; line-height:1; cursor:pointer;
+    background:var(--primary); color:var(--on-primary); transition:background .12s ease;
+    flex:1; min-width:0;
+  }
+  .btn:hover { background:var(--primary-active); }
+  .btn:active { background:var(--primary-active); }
+  .btn.secondary { background:var(--canvas); color:var(--ink); border:1px solid var(--hairline); }
+  .btn.secondary:hover { background:var(--surface-soft); }
+  .btn:disabled { background:var(--primary-disabled); color:var(--muted); cursor:default; }
+  .btn.block { width:100%; flex:none; }
+  input[type=file] { display:none; }
+
+  .field { margin-top:var(--s-md); }
+  .field label { display:block; font-size:13px; font-weight:500; color:var(--muted); margin-bottom:6px; }
+  .text-input {
+    width:100%; height:40px; padding:10px 14px; border-radius:var(--r-md);
+    border:1px solid var(--hairline); background:var(--canvas); color:var(--ink);
+    font-family:var(--mono); font-size:13px;
+  }
+  .text-input:focus { outline:none; border-color:var(--ink); box-shadow:0 0 0 3px rgba(17,17,17,.06); }
+  .hint { font-size:13px; color:var(--muted-soft); margin:8px 0 0; }
+
+  .preview-wrap { margin-top:var(--s-md); display:none; }
+  img.preview { width:100%; display:block; border-radius:var(--r-lg); border:1px solid var(--hairline); }
+
+  .live-wrap { margin-top:var(--s-md); display:none; }
+  #video { width:100%; display:block; border-radius:var(--r-lg); border:1px solid var(--hairline);
+           background:#000; aspect-ratio:4/3; object-fit:cover; }
+
+  /* ── Result section ──────────────────────────────────────────────────── */
+  .results { display:none; padding:0 0 64px; }
+  .result-card {
+    background:var(--canvas); border:1px solid var(--hairline); border-radius:var(--r-lg);
+    box-shadow:var(--shadow-sm); padding:var(--s-xl); max-width:840px; margin:0 auto;
+  }
+  .verdict { display:inline-flex; align-items:center; font-size:16px; font-weight:600;
+             padding:8px 16px; border-radius:var(--r-pill); }
+  .verdict.ok  { background:rgba(16,185,129,.10); color:#0f7a5a; }
+  .verdict.bad { background:rgba(239,68,68,.10); color:#b42318; }
+
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s-sm); margin:var(--s-lg) 0; }
+  .stat { background:var(--surface-card); border-radius:var(--r-lg); padding:var(--s-md); }
+  .stat .k { font-size:12px; font-weight:500; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stat .v { font-family:var(--mono); font-size:22px; font-weight:500; color:var(--ink); margin-top:4px; }
+
+  /* view toggle: Original / Heatmap / Boxes */
+  .view-tabs { display:inline-flex; gap:4px; background:var(--surface-card);
+               padding:4px; border-radius:var(--r-md); margin:var(--s-xs) 0 var(--s-sm); }
+  .view-tab { border:none; background:transparent; color:var(--muted); font-family:var(--font);
+              font-size:13px; font-weight:600; padding:6px 14px; border-radius:var(--r-sm); cursor:pointer; }
+  .view-tab.active { background:var(--canvas); color:var(--ink); box-shadow:var(--shadow-sm); }
+
+  .stage { position:relative; width:100%; max-width:520px; margin:0 auto; line-height:0; }
+  img.overlay { width:100%; display:block; border-radius:var(--r-lg); border:1px solid var(--hairline); }
+  .box-layer { position:absolute; inset:0; pointer-events:none; }
+  .bbox { position:absolute; border:2px solid var(--error); box-sizing:border-box; border-radius:2px; }
+  .bbox .lbl { position:absolute; top:-17px; left:-2px; font-family:var(--mono); font-size:11px;
+               font-weight:600; color:#fff; background:var(--error); padding:0 4px;
+               border-radius:3px; line-height:16px; white-space:nowrap; }
+
+  table { width:100%; border-collapse:collapse; margin-top:var(--s-md); font-size:13px; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--hairline-soft); }
+  th { font-weight:600; color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  td { color:var(--body); font-family:var(--mono); }
+  .section-label { font-size:13px; font-weight:600; color:var(--muted); text-transform:uppercase;
+                   letter-spacing:.05em; margin:var(--s-lg) 0 var(--s-xs); }
+
+  .spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,.45); border-top-color:#fff;
+             border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ── Features band ───────────────────────────────────────────────────── */
+  .features { padding:64px 0 var(--s-section); border-top:1px solid var(--hairline-soft); }
+  .features .head { max-width:640px; margin-bottom:var(--s-xl); }
+  .features .head p { color:var(--muted); font-size:18px; margin:var(--s-sm) 0 0; }
+  .feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s-lg); }
+  .feature-card { background:var(--surface-card); border-radius:var(--r-lg); padding:var(--s-xl); }
+  .feature-card .step { font-family:var(--mono); font-size:12px; font-weight:500; color:var(--muted);
+                        text-transform:uppercase; letter-spacing:.06em; margin-bottom:var(--s-sm); }
+  .feature-card h4 { margin:0 0 6px; font-size:18px; font-weight:600; color:var(--ink); letter-spacing:-0.01em; }
+  .feature-card p { margin:0; font-size:15px; color:var(--muted); }
+
+  /* ── Footer (only dark surface) ──────────────────────────────────────── */
+  footer { background:var(--surface-dark); color:var(--on-dark-soft); padding:64px 0; }
+  footer .cols { display:grid; grid-template-columns:2fr 1fr 1fr; gap:var(--s-xl); }
+  footer .wordmark { color:var(--on-dark); }
+  footer .tag { font-size:14px; color:var(--on-dark-soft); margin:var(--s-md) 0 0; max-width:36ch; }
+  footer h5 { font-size:13px; font-weight:600; color:#fff; text-transform:uppercase; letter-spacing:.05em; margin:0 0 var(--s-md); }
+  footer ul { list-style:none; margin:0; padding:0; }
+  footer li { margin-bottom:10px; }
+  footer a { color:var(--on-dark-soft); font-size:14px; }
+  footer a:hover { color:#fff; }
+  footer .rule { border-top:1px solid var(--surface-dark-elevated); margin:var(--s-xl) 0 var(--s-md); }
+  footer .fine { font-size:13px; color:var(--muted-soft); }
+
+  /* ── Responsive ──────────────────────────────────────────────────────── */
+  @media (max-width:900px) {
+    .hero { grid-template-columns:1fr; gap:var(--s-xl); padding:56px 0 40px; }
+    .feature-grid { grid-template-columns:1fr; }
+    .stats { grid-template-columns:1fr; }
+    footer .cols { grid-template-columns:1fr; gap:var(--s-lg); }
+    .nav .desk { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wordmark">Fabric Defect Inspector</div>
+  <div class="nav-right">
+    <a class="nav-link desk" href="#how">How it works</a>
+    <span class="status-pill" id="status"><span id="statusText">checking…</span></span>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <!-- ── Hero ─────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div>
+      <span class="eyebrow">DINOv2 + PatchCore</span>
+      <h1 class="display d-xl">Inspect fabric for defects.</h1>
+      <p class="lead">Upload a photo. Get a heatmap and boxes over any flaw.</p>
+    </div>
+
+    <!-- hero-app-mockup-card: the actual tool -->
+    <div class="app-card" id="dropzone">
+      <div class="head">
+        <h3>New inspection</h3>
+        <span class="cat">DINOv2 + PatchCore</span>
+      </div>
+
+      <div class="btn-row">
+        <label class="btn">Camera
+          <input type="file" id="camera" accept="image/*" capture="environment" />
+        </label>
+        <label class="btn secondary">Gallery
+          <input type="file" id="gallery" accept="image/*" />
+        </label>
+      </div>
+      <button class="btn secondary block" id="liveBtn" style="margin-top:var(--s-sm)">Live camera</button>
+
+      <div class="live-wrap" id="liveWrap">
+        <video id="video" playsinline autoplay muted></video>
+        <div class="btn-row" style="margin-top:var(--s-sm)">
+          <button class="btn" id="capture">Capture &amp; analyze</button>
+          <button class="btn secondary" id="stopCam">Stop</button>
+        </div>
+      </div>
+      <p class="hint" id="liveHint"></p>
+      <canvas id="canvas" style="display:none"></canvas>
+
+      <div class="field">
+        <label for="endpoint">API endpoint</label>
+        <input class="text-input" id="endpoint" value="http://localhost:8000/predict" spellcheck="false" />
+        <p class="hint">Auto-set to the host serving this page and remembered on this
+          device. Change it only for a Colab / ngrok URL or a different machine.
+          Tip: drag an image onto this card or paste one with Ctrl/⌘+V.</p>
+      </div>
+
+      <div class="preview-wrap" id="previewWrap">
+        <img class="preview" id="preview" alt="selected fabric" />
+        <button class="btn block" id="analyze" style="margin-top:var(--s-md)">Analyze</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Results ──────────────────────────────────────────────────────── -->
+  <section class="results" id="results">
+    <div class="result-card">
+      <span class="verdict" id="verdict"><span id="verdictText">—</span></span>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="section-label">Result</div>
+      <div class="view-tabs" id="viewTabs">
+        <button class="view-tab" data-view="original">Original</button>
+        <button class="view-tab" data-view="heatmap">Heatmap</button>
+        <button class="view-tab active" data-view="boxes">Boxes</button>
+      </div>
+      <div class="stage" id="stage">
+        <img class="overlay" id="overlay" alt="inspection result" />
+        <div class="box-layer" id="boxLayer"></div>
+      </div>
+
+      <div id="boxWrap"></div>
+    </div>
+  </section>
+
+  <!-- ── Features ─────────────────────────────────────────────────────── -->
+  <section class="features" id="how">
+    <div class="head">
+      <h2 class="display d-lg">How it works</h2>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="step">Step 1</div>
+        <h4>Embed</h4>
+        <p>DINOv2 turns each patch into a feature vector.</p>
+      </div>
+      <div class="feature-card">
+        <div class="step">Step 2</div>
+        <h4>Compare</h4>
+        <p>PatchCore scores each patch against a bank of flawless samples.</p>
+      </div>
+      <div class="feature-card">
+        <div class="step">Step 3</div>
+        <h4>Locate</h4>
+        <p>High scores become a heatmap and boxes on the flaw.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ── Footer (only dark surface) ─────────────────────────────────────── -->
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <div class="wordmark">Fabric Defect Inspector</div>
+        <p class="tag">Unsupervised defect detection for fabric.</p>
+      </div>
+      <div>
+        <h5>Project</h5>
+        <ul>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#">Model checkpoints</a></li>
+          <li><a href="#">Paper outline</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Data</h5>
+        <ul>
+          <li><a href="https://www.mvtec.com/company/research/datasets/mvtec-ad" target="_blank" rel="noopener">MVTec AD dataset</a></li>
+          <li><a href="#">Backend API</a></li>
+          <li><a href="#">README</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <p class="fine">DINOv2 + PatchCore</p>
+  </div>
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selectedFile = null;
+let lastResult = null;   // most recent /predict response, for the view toggle
+
+/* Default the endpoint to whatever host served this page, so opening the app at
+   http://<mac-ip>:5173 on a phone automatically targets http://<mac-ip>:8000 --
+   no manual editing. (When opened as a file://, hostname is empty -> keep the
+   value in the markup.) Change the field by hand for Colab / ngrok URLs. */
+(function initEndpoint() {
+  const saved = localStorage.getItem("fd_endpoint");
+  if (saved) { $("endpoint").value = saved; return; }   // user's explicit choice wins
+  if (location.hostname) {
+    $("endpoint").value = `${location.protocol}//${location.hostname}:8000/predict`;
+  }
+})();
+/* Remember whatever endpoint the user settles on (Colab/ngrok URLs survive reload). */
+$("endpoint").addEventListener("change", () => {
+  localStorage.setItem("fd_endpoint", $("endpoint").value.trim());
+});
+
+/* health check -> nav status pill */
+async function checkHealth() {
+  const ep = $("endpoint").value.trim();
+  const base = ep.replace(/\/predict\/?$/, "");
+  try {
+    const res = await fetch(base + "/health", { method:"GET" });
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    $("status").className = "status-pill ok";
+    $("statusText").textContent = `online · ${d.category}`;
+  } catch {
+    $("status").className = "status-pill down";
+    $("statusText").textContent = "backend offline";
+  }
+}
+$("endpoint").addEventListener("change", checkHealth);
+checkHealth();
+
+function setFile(f) {
+  if (!f || !f.type.startsWith("image/")) return;
+  selectedFile = f;
+  $("preview").src = URL.createObjectURL(f);
+  $("previewWrap").style.display = "block";
+  $("results").style.display = "none";
+}
+function onPick(e) { setFile(e.target.files[0]); }
+$("camera").addEventListener("change", onPick);
+$("gallery").addEventListener("change", onPick);
+
+/* Drag an image onto the card, or paste one from the clipboard (Ctrl/⌘+V). */
+const drop = $("dropzone");
+["dragenter", "dragover"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach((ev) =>
+  drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", (e) => {
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+window.addEventListener("paste", (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
+  if (item) setFile(item.getAsFile());
+});
+
+/* shared analyze flow — used by the Analyze button and the live-camera capture */
+async function runAnalyze(file, btn, label) {
+  if (!file) return;
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch($("endpoint").value.trim(), { method:"POST", body: fd });
+    if (!res.ok) {
+      let detail = "HTTP " + res.status;
+      try { const j = await res.json(); if (j.detail) detail = j.detail; } catch {}
+      throw new Error(detail);
+    }
+    renderResult(await res.json());
+  } catch (err) {
+    renderError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label || prev;
+  }
+}
+
+$("analyze").addEventListener("click", () => runAnalyze(selectedFile, $("analyze"), "Analyze"));
+
+/* ── Live camera (getUserMedia; needs localhost or https) ─────────────────── */
+let stream = null;
+
+async function startCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $("liveHint").textContent =
+      "Live camera needs a secure context — open this page at http://localhost:5173 " +
+      "on the computer, or serve it over HTTPS. On a phone over LAN, use the Camera button instead.";
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" }, audio: false,
+    });
+  } catch (err) {
+    $("liveHint").textContent = "Could not open camera: " + err.message;
+    return;
+  }
+  $("video").srcObject = stream;
+  $("liveWrap").style.display = "block";
+  $("previewWrap").style.display = "none";
+  $("liveHint").textContent = "Point at the fabric, then Capture & analyze. Repeat as needed.";
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+  $("liveWrap").style.display = "none";
+  $("liveHint").textContent = "";
+}
+
+$("liveBtn").addEventListener("click", startCamera);
+$("stopCam").addEventListener("click", stopCamera);
+
+$("capture").addEventListener("click", () => {
+  const v = $("video");
+  if (!v.videoWidth) return;
+  const c = $("canvas");
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  c.toBlob((blob) => {
+    if (!blob) return;
+    const file = new File([blob], "capture.png", { type: "image/png" });
+    runAnalyze(file, $("capture"), "Capture & analyze");
+  }, "image/png");
+});
+
+/* ── Result view toggle: Original / Heatmap / Boxes ───────────────────────── */
+function drawBoxLayer(show) {
+  const layer = $("boxLayer");
+  layer.innerHTML = "";
+  const d = lastResult;
+  if (!show || !d || !d.boxes || !d.boxes.length) return;
+  const size = d.image_size || 224;   // boxes are in the resized inference frame
+  d.boxes.forEach((b) => {
+    const el = document.createElement("div");
+    el.className = "bbox";
+    el.style.left = (b.x / size) * 100 + "%";
+    el.style.top = (b.y / size) * 100 + "%";
+    el.style.width = (b.w / size) * 100 + "%";
+    el.style.height = (b.h / size) * 100 + "%";
+    el.innerHTML = `<span class="lbl">${Number(b.score).toFixed(2)}</span>`;
+    layer.appendChild(el);
+  });
+}
+
+function setView(view) {
+  const d = lastResult;
+  if (!d) return;
+  // Map each tab to its base image; boxes are drawn as a scalable overlay layer.
+  const src = view === "heatmap" ? d.heatmap_png
+            : view === "combined" ? d.overlay_png   // legacy single-image fallback
+            : d.original_png || d.overlay_png;        // original / boxes share the clean photo
+  if (src) { $("overlay").src = src; $("overlay").style.display = "block"; }
+  else $("overlay").style.display = "none";
+  drawBoxLayer(view === "boxes");   // vector boxes only on the Boxes tab
+  document.querySelectorAll(".view-tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.view === view));
+}
+
+document.querySelectorAll(".view-tab").forEach((t) =>
+  t.addEventListener("click", () => setView(t.dataset.view)));
+
+function renderError(msg) {
+  $("results").style.display = "block";
+  $("verdict").className = "verdict bad";
+  $("verdictText").textContent = "Request failed";
+  $("stats").innerHTML = "";
+  $("overlay").style.display = "none";
+  $("boxLayer").innerHTML = "";
+  $("viewTabs").style.display = "none";
+  $("boxWrap").innerHTML =
+    `<p class="hint">${msg} — is the backend running and reachable at the endpoint above?</p>`;
+  $("results").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+function renderResult(d) {
+  $("results").style.display = "block";
+  const defective = d.is_defective === null ? d.num_defects > 0 : d.is_defective;
+
+  $("verdict").className = "verdict " + (defective ? "bad" : "ok");
+  $("verdictText").textContent = defective
+    ? `Defective — ${d.num_defects} region(s) flagged`
+    : "Pass — no defect detected";
+
+  const latency = d.latency_ms != null
+    ? `<div class="stat"><div class="k">Inference</div><div class="v">${d.latency_ms}ms</div></div>`
+    : `<div class="stat"><div class="k">Frame size</div><div class="v">${d.image_size}px</div></div>`;
+  $("stats").innerHTML =
+    `<div class="stat"><div class="k">Anomaly score</div><div class="v">${d.anomaly_score}</div></div>` +
+    `<div class="stat"><div class="k">Defect regions</div><div class="v">${d.num_defects}</div></div>` +
+    latency;
+
+  lastResult = d;
+  // Old backends only send the combined overlay_png; hide the tabs and show it as-is.
+  const hasLayers = !!(d.original_png && d.heatmap_png);
+  $("viewTabs").style.display = hasLayers ? "inline-flex" : "none";
+  setView(hasLayers ? "boxes" : "combined");
+
+  if (d.boxes && d.boxes.length) {
+    let t = "<div class='section-label'>Bounding boxes</div>" +
+            "<table><tr><th>#</th><th>x, y</th><th>w × h</th><th>score</th></tr>";
+    d.boxes.forEach((b, i) => {
+      t += `<tr><td>${i+1}</td><td>${b.x}, ${b.y}</td><td>${b.w} × ${b.h}</td><td>${b.score}</td></tr>`;
+    });
+    $("boxWrap").innerHTML = t + "</table>";
+  } else $("boxWrap").innerHTML = "";
+
+  $("results").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+</script>
+</body>
+</html>

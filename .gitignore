@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local env / secrets
+.env
+
+# Data & large artifacts (see README for how to fetch / regenerate)
+data/
+mvtec/
+*.pt
+*.bak
+outputs/*.png
+outputs/*.csv
+
+# Notebooks
+*.ipynb_checkpoints
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local (per-machine) settings
+.claude/settings.local.json

@@ -1,0 +1,3 @@
+# The backend shares the project's pinned dependencies -- no separate list to
+# drift out of sync. Install from here or from the repo-root requirements.txt.
+-r ../requirements.txt

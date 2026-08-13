@@ -1,0 +1,26 @@
+# Default experiment config -- the single source of truth for hyperparameters.
+# scripts/train.py and scripts/calibrate.py read their defaults from here; pass
+# --flag on the CLI to override any value. Reported in the paper (see
+# paper/outline.md reproducibility checklist).
+seed: 0                        # global RNG seed (torch + numpy + coreset)
+
+data:
+  root: /content/mvtec        # where MVTec AD is extracted
+  category: carpet            # textile-like: carpet | leather | grid
+  image_size: 224            # must be divisible by 14 (DINOv2 patch size)
+
+model:
+  backbone: dinov2_vits14    # vits14 (Colab-safe) | vitb14 | wide_resnet50_2 (baseline)
+  layers: [9]                # transformer block(s) to pull patch tokens from
+  coreset_ratio: 0.10        # fraction of normal patches kept in memory bank
+  n_neighbors: 1             # k in nearest-neighbour scoring
+  agg_kernel: 3              # local-aggregation neighbourhood
+
+eval:
+  box_threshold: 0.5         # heatmap cutoff for bounding boxes (0-1 normalized)
+  min_box_area: 64           # ignore tiny blobs (noise)
+
+train:
+  batch_size: 8              # inference batch size for fit + eval
+  n_vis: 6                   # number of qualitative overlays to save
+  results_csv: outputs/results.csv   # appended one row per run (paper table)
