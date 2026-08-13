@@ -68,6 +68,13 @@ function showState(name) {
     $("state" + s).classList.toggle("hide", s.toLowerCase() !== name);
   }
 }
+/* On narrow screens the result pane sits below the inputs, so bring it into view
+   after an analysis (otherwise the user sees nothing happen). */
+function revealResult() {
+  if (window.matchMedia("(max-width: 860px)").matches) {
+    $("resultPane").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
 
 /* ── File selection (upload / camera / drop / paste) ─────────────────────── */
 function setFile(f) {
@@ -183,6 +190,7 @@ const BAD_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M12 8v5M12 16.5v
 function renderError(msg) {
   $("errorMsg").textContent = `${msg} — is the backend running and reachable at the endpoint on the left?`;
   showState("error");
+  revealResult();
 }
 
 function renderResult(d) {
@@ -227,6 +235,7 @@ function renderResult(d) {
   } else $("boxWrap").innerHTML = "";
 
   showState("result");
+  revealResult();
 }
 
 /* view toggle: Original / Heatmap / Boxes */

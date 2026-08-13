@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fabric Inspect — unsupervised defect detection</title>
-<meta name="description" content="Inspect fabric for defects without labelling any. DINOv2 + PatchCore: an anomaly score, heatmap, and bounding boxes — trained only on defect-free fabric." />
+<meta name="description" content="Inspect fabric for defects without labelling any. DINOv3 + PatchCore: an anomaly score, heatmap, and bounding boxes — trained only on defect-free fabric." />
 <meta name="color-scheme" content="light" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,6 +56,15 @@
   /* flex items default to min-width:auto and refuse to shrink → overflow. */
   .nav-inner > *, .hero > *, .proof > * { min-width: 0; }
 
+  /* hero entrance (staggered) */
+  .hero > *, .hero .cta, .hero .proof { animation: fadeInUp .5s cubic-bezier(.2, .7, .2, 1) both; }
+  .hero .eyebrow { animation-delay: .02s; }
+  .hero h1 { animation-delay: .08s; }
+  .hero .lead { animation-delay: .16s; }
+  .hero .cta { animation-delay: .24s; }
+  .hero .proof { animation-delay: .32s; }
+  .hero .scroll-hint { animation-delay: .40s; }
+
   @media (max-width: 620px) {
     .proof { gap: var(--s-4) var(--s-5); }
     .proof .sep { display: none; }
@@ -88,7 +97,7 @@
 
 <main>
   <section class="hero">
-    <span class="eyebrow">DINOv2 + PatchCore · unsupervised</span>
+    <span class="eyebrow">DINOv3 + PatchCore · unsupervised</span>
     <h1>Inspect fabric.<br /><span class="accent">No labels.</span></h1>
     <p class="lead">Train only on defect-free fabric. Get an anomaly score, a pixel-level
       heatmap, and bounding boxes over any flaw — no annotated defects, ever.</p>
@@ -104,11 +113,11 @@
     </div>
 
     <div class="proof">
-      <div class="item"><div class="v">0.996</div><div class="k">image AUROC · carpet</div></div>
+      <div class="item"><div class="v">0.999</div><div class="k">image AUROC · carpet</div></div>
       <div class="sep"></div>
       <div class="item"><div class="v">0</div><div class="k">defect labels needed</div></div>
       <div class="sep"></div>
-      <div class="item"><div class="v">ViT-S/14</div><div class="k">DINOv2 backbone</div></div>
+      <div class="item"><div class="v">ViT-L/16</div><div class="k">DINOv3 backbone</div></div>
     </div>
 
     <a class="scroll-hint" href="#how">
@@ -120,13 +129,13 @@
   <section class="how" id="how">
     <span class="label">How it works</span>
     <h2>Learn normal. Flag the rest.</h2>
-    <p>DINOv2 turns every patch into a feature vector; PatchCore scores each against a
+    <p>DINOv3 turns every patch into a feature vector; PatchCore scores each against a
       bank of flawless samples. Whatever sits far from normal becomes a heatmap — and,
       thresholded, a box. No trained detector, no labels.</p>
     <div class="flow">
       <span class="chip">Defect-free fabric</span>
       <span class="arr">→</span>
-      <span class="chip">DINOv2 features</span>
+      <span class="chip">DINOv3 features</span>
       <span class="arr">→</span>
       <span class="chip">Nearest-neighbour distance</span>
       <span class="arr">→</span>
@@ -143,7 +152,7 @@
     <div class="footer-grid">
       <div>
         <a class="brand" href="/"><svg class="logo" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="4" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/></svg> Fabric Inspect</a>
-        <p class="hint" style="max-width:32ch">Unsupervised fabric defect detection. DINOv2 + PatchCore.</p>
+        <p class="hint" style="max-width:32ch">Unsupervised fabric defect detection. DINOv3 + PatchCore.</p>
       </div>
       <div>
         <h5>Product</h5>

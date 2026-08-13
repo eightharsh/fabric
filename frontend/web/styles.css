@@ -207,6 +207,22 @@ table.data tr:last-child td { border-bottom: none; }
 .footer a:hover { color: var(--text); }
 .footer .fine { font-size: 12.5px; color: var(--text-3); margin-top: var(--s-6); padding-top: var(--s-4); border-top: 1px solid var(--border); }
 
+/* ---- Motion -------------------------------------------------------------- */
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn    { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: none; } }
+.fade-up { animation: fadeInUp .34s cubic-bezier(.2, .7, .2, 1) both; }
+/* stat tiles cascade in */
+.stats .stat { animation: fadeInUp .34s cubic-bezier(.2, .7, .2, 1) both; }
+.stats .stat:nth-child(2) { animation-delay: .05s; }
+.stats .stat:nth-child(3) { animation-delay: .10s; }
+.stats .stat:nth-child(4) { animation-delay: .15s; }
+.stage img.overlay { transition: opacity .25s ease; }
+.bbox { animation: popIn .28s cubic-bezier(.2, .7, .2, 1) both; }
+.verdict { animation: fadeInUp .3s cubic-bezier(.2, .7, .2, 1) both; }
+.btn:active { transform: translateY(1px); }
+.view-tab, .stat, .card, .panel { transition: background .14s ease, border-color .14s ease, box-shadow .14s ease; }
+
 /* ---- Utilities ----------------------------------------------------------- */
 .muted { color: var(--text-3); }
 .divider { height: 1px; background: var(--border); border: 0; margin: 0; }

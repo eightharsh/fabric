@@ -91,8 +91,15 @@ async function startCamera() {
 function stopCamera() {
   if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
   $("video").style.display = "none"; $("rawImg").style.display = "";
+  $("liveBtn").textContent = "Live";
+  $("liveBtn").classList.remove("pri");
 }
-$("liveBtn").addEventListener("click", startCamera);
+$("liveBtn").addEventListener("click", () => {
+  if (stream) { stopCamera(); return; }        // toggle off
+  startCamera();
+  $("liveBtn").textContent = "Stop";
+  $("liveBtn").classList.add("pri");
+});
 
 /* ── analyze + render the 3 monitors ─────────────────────────────────────── */
 function setStatus(cls, text) {
