@@ -24,6 +24,13 @@ test image ──▶ DINOv2 features ──▶ nearest-neighbour distance ──
 Big distance from "normal" = defect. The heatmap is the per-patch distance;
 boxes come from thresholding that map (no trained detector).
 
+**Robust localization (adaptive thresholding).** A *fixed* box cutoff works on
+MVTec's clean textures but **floods on real fabric** (AITEX), whose anomaly maps
+sit on a higher background — a 0.5 cutoff swallowed ~74% of the tile. The default
+is now an **adaptive** per-image cutoff (`mean + k·std`), which keeps boxes tight
+on both clean benchmarks and real fabric while leaving defect-free images empty.
+Set `eval.box_threshold` to a float to force a fixed cutoff.
+
 ## Project layout
 ```
 config/default.yaml     experiment settings — the single source of truth

@@ -22,7 +22,10 @@ model:
   agg_kernel: 3              # local-aggregation neighbourhood
 
 eval:
-  box_threshold: 0.5         # heatmap cutoff for bounding boxes (0-1 normalized)
+  # Box cutoff: "adaptive" = per-image mean + box_k*std (robust on real fabric,
+  # where a fixed cutoff floods); or a float in 0-1 for a fixed cutoff.
+  box_threshold: adaptive
+  box_k: 2.0                 # std multiplier for the adaptive cutoff
   min_box_area: 64           # ignore tiny blobs (noise)
 
 train:

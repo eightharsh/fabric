@@ -38,14 +38,28 @@ def heatmap_overlay(rgb: np.ndarray, amap01: np.ndarray, alpha: float = 0.5) -> 
 
 
 def boxes_from_map(
-    amap01: np.ndarray, threshold: float = 0.5, min_area: int = 64
+    amap01: np.ndarray, threshold=0.5, min_area: int = 64, k: float = 2.0
 ) -> list[dict]:
     """Threshold -> connected components -> bounding boxes.
+
+    threshold: a float in [0,1], OR the string "adaptive" for a per-image cutoff
+    of mean + k*std. A FIXED cutoff floods on real fabric (AITEX), whose anomaly
+    maps sit on a higher background than MVTec's clean textures, so a 0.5 box
+    swallows the whole tile. The adaptive cutoff scales with each map's own
+    spread, giving tight boxes on both clean benchmarks and real fabric while
+    leaving defect-free images empty.
 
     Returns list of {x, y, w, h, area, score} in pixel coords. `score` is the
     peak anomaly value inside the box (a per-defect confidence).
     """
-    mask = (amap01 >= threshold).astype(np.uint8)
+    if isinstance(threshold, str) and threshold.lower() == "adaptive":
+        std = float(amap01.std())
+        if std < 1e-6:
+            return []  # uniform map -> no localizable region
+        thr = float(amap01.mean() + k * std)
+    else:
+        thr = float(threshold)
+    mask = (amap01 >= thr).astype(np.uint8)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
 
     boxes = []

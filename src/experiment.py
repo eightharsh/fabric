@@ -223,7 +223,8 @@ def _write_overlays(out_dir: Path, category: str, imgs, maps, scores, cfg) -> No
         amap = viz.normalize_map(maps[idx], vmin, vmax)
         overlay = viz.heatmap_overlay(rgb, amap)
         boxes = viz.boxes_from_map(
-            amap, threshold=cfg.eval.box_threshold, min_area=cfg.eval.min_box_area
+            amap, threshold=cfg.eval.box_threshold, min_area=cfg.eval.min_box_area,
+            k=getattr(cfg.eval, "box_k", 2.0),
         )
         boxed = viz.draw_boxes(overlay, boxes)
         cv2.imwrite(str(out_dir / f"{category}_{rank}.png"), cv2.cvtColor(boxed, cv2.COLOR_RGB2BGR))

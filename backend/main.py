@@ -48,7 +48,12 @@ from src.utils import visualize as viz  # noqa: E402
 _cfg = load_config()
 CATEGORY = os.getenv("FD_CATEGORY", _cfg.data.category)
 IMAGE_SIZE = int(os.getenv("FD_IMAGE_SIZE", str(_cfg.data.image_size)))
-BOX_THRESHOLD = float(os.getenv("FD_BOX_THRESHOLD", str(_cfg.eval.box_threshold)))
+_bt = os.getenv("FD_BOX_THRESHOLD", str(_cfg.eval.box_threshold))
+try:
+    BOX_THRESHOLD = float(_bt)          # fixed cutoff
+except ValueError:
+    BOX_THRESHOLD = _bt                 # e.g. "adaptive"
+BOX_K = float(os.getenv("FD_BOX_K", str(getattr(_cfg.eval, "box_k", 2.0))))
 MIN_BOX_AREA = int(_cfg.eval.min_box_area)
 MAX_UPLOAD_BYTES = int(float(os.getenv("FD_MAX_UPLOAD_MB", "15")) * 1024 * 1024)
 CKPT_DIR = ROOT / "checkpoints"
@@ -213,7 +218,7 @@ async def predict(file: UploadFile = File(...), category: str = Form(default=Non
 
         rgb = viz.denormalize(tensor[0])          # plain resized input, no overlay
         heat = viz.heatmap_overlay(rgb, amap)     # heatmap only, no boxes
-        boxes = viz.boxes_from_map(amap, threshold=BOX_THRESHOLD, min_area=MIN_BOX_AREA)
+        boxes = viz.boxes_from_map(amap, threshold=BOX_THRESHOLD, min_area=MIN_BOX_AREA, k=BOX_K)
         boxed = viz.draw_boxes(heat, boxes)       # heatmap + boxes (legacy combined view)
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)
     except Exception as e:  # noqa: BLE001 -- inference failure -> clean 500

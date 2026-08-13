@@ -15,6 +15,24 @@ def test_boxes_from_map_finds_the_blob():
     assert b["score"] == 1.0
 
 
+def test_adaptive_threshold_isolates_the_hotspot():
+    # High background (0.6) + a hot spot (1.0): a FIXED 0.5 cutoff would flood the
+    # whole map (as it does on real fabric); adaptive (mean+k*std) stays tight.
+    amap = np.full((32, 32), 0.6, dtype=np.float32)
+    amap[10:14, 12:16] = 1.0
+    flooded = viz.boxes_from_map(amap, threshold=0.5, min_area=4)
+    assert flooded and flooded[0]["w"] * flooded[0]["h"] > 900  # ~whole 32x32 map
+    tight = viz.boxes_from_map(amap, threshold="adaptive", k=2.0, min_area=4)
+    assert len(tight) == 1
+    assert tight[0]["w"] <= 8 and tight[0]["h"] <= 8  # just the hotspot
+
+
+def test_adaptive_threshold_no_box_on_flat_map():
+    # A defect-free (flat) map must not produce spurious boxes.
+    amap = np.full((32, 32), 0.3, dtype=np.float32)
+    assert viz.boxes_from_map(amap, threshold="adaptive", k=2.0, min_area=4) == []
+
+
 def test_boxes_min_area_filters_noise():
     amap = np.zeros((32, 32), dtype=np.float32)
     amap[0, 0] = 1.0  # single pixel
