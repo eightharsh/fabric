@@ -97,6 +97,29 @@ localization / PRO — expected, since patch-16 gives a coarser 14×14 grid vs
 DINOv2's 16×16 at 224px (blurrier heatmap). A fair follow-up is DINOv3 at **256px**
 (→ 16×16 grid) and the other textile categories. One category is not conclusive.
 
+## Localization findings (fixed vs adaptive box threshold)
+
+`scripts/eval_localization.py` measures box-vs-mask overlap over defective test
+images (PRO/pixel-AUROC score the heatmap, not the boxes):
+
+| category | method | IoU | precision | recall |
+|---|---|---|---|---|
+| carpet | fixed 0.5 | 0.105 | 0.106 | 0.924 |
+| carpet | **adaptive** | **0.228** | **0.234** | 0.910 |
+| leather | fixed 0.5 | 0.042 | 0.042 | 0.971 |
+| leather | **adaptive** | **0.107** | **0.111** | 0.886 |
+| grid | fixed 0.5 | 0.047 | 0.049 | 0.901 |
+| grid | **adaptive** | **0.121** | **0.142** | 0.638 |
+| aitex (real) | fixed 0.5 | 0.041 | 0.062 | 0.366 |
+| aitex (real) | adaptive | 0.020 | 0.064 | 0.180 |
+
+- **Benchmarks: adaptive ~doubles IoU** and avoids the whole-tile flood a fixed
+  cutoff produces — a clear win, so it is the default.
+- **Real fabric: both are poor** (IoU ~0.02-0.04, precision ~0.06). Thresholding
+  is not the bottleneck here; the coarse 14x14 grid (patch-16 @224) vs small real
+  defects is. Open follow-ups: DINOv3 @256px (16x16 grid) and a stricter AITEX
+  tile prep (`--min-defect-pixels`), then re-run this eval.
+
 ## 3) Ablation (after the baseline works)
 
 ```bash
