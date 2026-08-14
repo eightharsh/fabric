@@ -8,6 +8,24 @@ const $ = (id) => document.getElementById(id);
 let selectedFile = null;
 let lastResult = null; // most recent /predict response, for the view toggle
 
+// Below this type-probe confidence a defect type is treated as low-confidence.
+// The backend may also return type "unknown" when it abstains (FD_ABSTAIN_THRESHOLD).
+const LOWCONF = 0.6;
+
+/* Render a defect's type cell with an honest confidence signal:
+   - backend "unknown" (abstained) -> an "uncertain" badge
+   - low confidence (< LOWCONF)     -> the % tinted as a warning
+   so a shaky guess never looks as authoritative as a confident one. */
+function typeCell(b) {
+  if (!b.type) return "—";
+  const conf = Math.round((b.type_conf || 0) * 100);
+  if (b.type === "unknown") {
+    return `<span class="uncertain">uncertain</span> <span class="muted">${conf}%</span>`;
+  }
+  const cls = (b.type_conf || 0) < LOWCONF ? "lowconf" : "muted";
+  return `${b.type} <span class="${cls}">${conf}%</span>`;
+}
+
 /* ── Endpoint: remember the user's choice; else default to this page's host ── */
 (function initEndpoint() {
   const saved = localStorage.getItem("fd_endpoint");
@@ -224,9 +242,7 @@ function renderResult(d) {
     let t = "<div class='boxes-title'>Defects (ASTM D5430 4-Point)</div><table class='data'>" +
       `<tr><th>#</th>${typed ? "<th>type</th>" : ""}<th>size (mm)</th><th>points</th><th>score</th></tr>`;
     d.boxes.forEach((b, i) => {
-      const type = b.type
-        ? `${b.type} <span class="muted">${Math.round((b.type_conf || 0) * 100)}%</span>`
-        : "—";
+      const type = typeCell(b);
       t += `<tr><td>${i + 1}</td>${typed ? `<td>${type}</td>` : ""}` +
         `<td>${b.size_mm ?? "—"}</td><td>${b.points ?? "—"}</td>` +
         `<td>${Number(b.score).toFixed(2)}</td></tr>`;

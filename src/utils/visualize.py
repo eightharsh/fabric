@@ -73,6 +73,18 @@ def boxes_from_map(
     return boxes
 
 
+def box_union_mask(boxes: list[dict], h: int, w: int) -> np.ndarray:
+    """Rasterize a list of boxes into a single (h,w) boolean coverage mask.
+
+    Shared by the localization eval scripts so predicted-region overlap is
+    computed the same way everywhere.
+    """
+    m = np.zeros((h, w), dtype=bool)
+    for b in boxes:
+        m[b["y"]:b["y"] + b["h"], b["x"]:b["x"] + b["w"]] = True
+    return m
+
+
 def draw_boxes(rgb: np.ndarray, boxes: list[dict]) -> np.ndarray:
     out = rgb.copy()
     for b in boxes:

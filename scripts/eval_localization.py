@@ -11,6 +11,12 @@ defect mask (union of predicted boxes vs mask):
 averaged over defective test images. This is the number behind the "robust
 localization" contribution.
 
+Also reports, per method:
+    IoU@0.50 / IoU@0.75 = fraction of defective images whose predicted box-union
+                          reaches that IoU with the ground-truth mask (a
+                          detection-style localization hit-rate).
+    F1                  = 2*P*R/(P+R) from the mean precision/recall above.
+
 Example:
     python scripts/eval_localization.py --data-root data --category aitex
     python scripts/eval_localization.py --data-root data --category carpet
@@ -33,13 +39,6 @@ from src.models.patchcore import PatchCore  # noqa: E402
 from src.utils import visualize as viz  # noqa: E402
 
 
-def _box_mask(boxes, h, w):
-    m = np.zeros((h, w), dtype=bool)
-    for b in boxes:
-        m[b["y"]:b["y"] + b["h"], b["x"]:b["x"] + b["w"]] = True
-    return m
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", default="data")
@@ -48,10 +47,12 @@ def main():
     ap.add_argument("--fixed", type=float, default=0.5)
     ap.add_argument("--k", type=float, default=2.0)
     ap.add_argument("--min-area", type=int, default=64)
+    ap.add_argument("--checkpoint", default=None, help="default checkpoints/<category>.pt")
     args = ap.parse_args()
 
     device = pick_device()
-    model = PatchCore.from_checkpoint(f"checkpoints/{args.category}.pt", device=device)
+    ckpt = args.checkpoint or f"checkpoints/{args.category}.pt"
+    model = PatchCore.from_checkpoint(ckpt, device=device)
     ds = MVTecDataset(args.data_root, args.category, "test", args.image_size)
     loader = DataLoader(ds, batch_size=8)
 
@@ -72,7 +73,7 @@ def main():
             h, w = amap.shape
             for name, thr in methods.items():
                 boxes = viz.boxes_from_map(amap, threshold=thr, k=args.k, min_area=args.min_area)
-                pm = _box_mask(boxes, h, w)
+                pm = viz.box_union_mask(boxes, h, w)
                 inter = np.logical_and(pm, gt).sum()
                 union = np.logical_or(pm, gt).sum()
                 agg[name]["iou"].append(inter / union if union else 0.0)
@@ -80,11 +81,20 @@ def main():
                 agg[name]["rec"].append(inter / gt.sum())
 
     print(f"\n=== {args.category}: box localization over {n_defect} defective images ===")
-    print(f"{'method':12s} {'IoU':>7s} {'precision':>10s} {'recall':>8s}")
+    cols = ["method", "IoU", "precision", "recall", "F1", "IoU@.50", "IoU@.75"]
+    widths = [12, 7, 10, 8, 7, 8, 8]
+    print("".join(f"{c:>{w}s}" if i else f"{c:<{w}s}"
+                  for i, (c, w) in enumerate(zip(cols, widths, strict=False))))
     for name in methods:
         a = agg[name]
-        print(f"{name:12s} {np.mean(a['iou']):7.3f} {np.mean(a['prec']):10.3f} "
-              f"{np.mean(a['rec']):8.3f}")
+        iou = np.asarray(a["iou"])
+        p, r = float(np.mean(a["prec"])), float(np.mean(a["rec"]))
+        f1 = 2 * p * r / (p + r) if (p + r) else 0.0
+        # Hit-rate: fraction of defective images meeting the IoU bar (0 if none).
+        iou50 = float((iou >= 0.50).mean()) if iou.size else 0.0
+        iou75 = float((iou >= 0.75).mean()) if iou.size else 0.0
+        print(f"{name:12s} {iou.mean():7.3f} {p:10.3f} {r:8.3f} {f1:7.3f} "
+              f"{iou50:8.3f} {iou75:8.3f}")
 
 
 if __name__ == "__main__":

@@ -160,6 +160,9 @@ svg { display: block; }
   font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: #fff;
   background: var(--danger); padding: 1px 5px; border-radius: 3px; line-height: 1.4; white-space: nowrap;
 }
+/* Uncertain defect type (backend abstained / low probe confidence): amber, not red,
+   so an unsure label never reads as a confident detection. */
+.bbox .lbl.lbl-unc { background: var(--warning); }
 
 /* ---- Stat tiles ---------------------------------------------------------- */
 .stats { display: grid; gap: var(--s-2); }
@@ -225,6 +228,13 @@ table.data tr:last-child td { border-bottom: none; }
 
 /* ---- Utilities ----------------------------------------------------------- */
 .muted { color: var(--text-3); }
+/* Type-confidence signals in the defect table (see app.js typeCell). */
+.lowconf { color: var(--warning); }
+.uncertain {
+  color: var(--warning); font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+  border-radius: 3px; padding: 0 5px; font-size: 12px;
+}
 .divider { height: 1px; background: var(--border); border: 0; margin: 0; }
 .hide { display: none !important; }
 

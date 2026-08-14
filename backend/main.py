@@ -16,6 +16,10 @@ Env:
     FD_IMAGE_SIZE     input frame size (default: config data.image_size)
     FD_THRESHOLD      override the calibrated pass/fail cutoff (optional)
     FD_BOX_THRESHOLD  heatmap cutoff for boxes (default: config eval.box_threshold)
+    FD_ABSTAIN_THRESHOLD  Stage-2 type-probe abstention cutoff; below it a defect
+                      is labelled "unknown" instead of a low-confidence guess
+                      (default: unset -> never abstain). See the calibration
+                      report from scripts/train_classifier.py to choose a value.
     FD_MAX_UPLOAD_MB  reject uploads larger than this (default: 15)
 """
 from __future__ import annotations
@@ -57,6 +61,11 @@ except ValueError:
     BOX_THRESHOLD = _bt                 # e.g. "adaptive"
 BOX_K = float(os.getenv("FD_BOX_K", str(getattr(_cfg.eval, "box_k", 2.0))))
 MIN_BOX_AREA = int(_cfg.eval.min_box_area)
+# Stage-2 abstention: top type-probability below this -> "unknown" (see P5
+# calibration: raw LR confidence is informative enough to abstain on; post-hoc
+# calibration was NOT justified on the small defect sets). Unset -> never abstain.
+_abstain = os.getenv("FD_ABSTAIN_THRESHOLD")
+ABSTAIN_THRESHOLD = float(_abstain) if _abstain not in (None, "") else None
 _grading_cfg = getattr(_cfg, "grading", None)
 _ppm_default = str(getattr(_grading_cfg, "pixels_per_mm", 5.0))
 PIXELS_PER_MM = float(os.getenv("FD_PIXELS_PER_MM", _ppm_default))
@@ -191,6 +200,7 @@ def health():
         "threshold": round(thr, 4) if thr is not None else None,
         "image_size": IMAGE_SIZE,
         "box_threshold": BOX_THRESHOLD,
+        "abstain_threshold": ABSTAIN_THRESHOLD,     # None => type probe never abstains
         "pixels_per_mm": PIXELS_PER_MM,             # default px->mm calibration (ASTM sizing)
         "available": _available_categories(),       # pick any of these per /predict
         "loaded": sorted(_models),                  # categories warm in memory
@@ -258,7 +268,9 @@ async def predict(
                 gy1 = max(gy0 + 1, int((b["y"] + b["h"]) * gh / IMAGE_SIZE))
                 m = np.zeros((gh, gw), dtype=np.float32)
                 m[gy0:gy1, gx0:gx1] = 1.0
-                b["type"], conf = clf.predict_label(pool_grid(grid, m))
+                b["type"], conf = clf.predict_label(
+                    pool_grid(grid, m), abstain_threshold=ABSTAIN_THRESHOLD
+                )
                 b["type_conf"] = round(conf, 2)
         boxed = viz.draw_boxes(heat, boxes)       # heatmap + boxes (legacy combined view)
         latency_ms = round((time.perf_counter() - t0) * 1000, 1)

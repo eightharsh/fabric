@@ -33,15 +33,20 @@ MVTec AD textile categories and the real **AITEX** fabric database; (3) an
 **adaptive, distribution-aware bounding-box threshold** for label-free
 localization; and (4) **two-stage defect typing** — a linear probe on the *same*
 frozen DINOv3 features names each defect (0.79–0.90 across categories) with no new
-network — feeding an **ASTM D5430 4-Point grade**. Empirically: DINOv3 raises image-level detection on MVTec carpet
-(image AUROC 0.9988 vs a DINOv2 baseline's 0.9956) but is slightly weaker on
-pixel-level metrics due to a coarser feature grid; the *same* pipeline that
-scores 0.998–0.999 image AUROC on MVTec falls to **0.916 on real AITEX fabric**,
-quantifying a large sim-to-real gap; and adaptive thresholding **roughly doubles
-box IoU on benchmarks** and removes a whole-tile "flooding" failure of fixed
-thresholds, while an honest aggregate analysis shows real-fabric *localization*
-is limited by feature resolution rather than the threshold. We release the whole
-system as a reproducible, deployable client–server application.
+network — feeding an **ASTM D5430 4-Point grade**. Empirically: DINOv3 raises
+image-level detection on MVTec carpet (image AUROC 0.9988 vs a DINOv2 baseline's
+0.9956) but its *final-layer* features are slightly weaker on pixel-level
+localization due to a coarser feature grid; the *same* pipeline that scores
+0.998–0.999 image AUROC on MVTec falls to **0.895 on real AITEX fabric** (measured
+on a **leakage-free, source-strip-disjoint split**), quantifying a large
+sim-to-real gap; a controlled **feature-layer study across three textile
+categories** shows that an *intermediate* DINOv3 block (≈¾ depth) recovers the
+lost threshold-free localization — **PRO +9–18%, pixel-AP up to +130%** over the
+final layer — a consistent, backbone-internal finding; and adaptive thresholding
+**roughly doubles box IoU on benchmarks** and removes a whole-tile "flooding"
+failure of fixed thresholds, while an honest analysis shows real-fabric
+*localization* is limited by feature resolution rather than the threshold. We
+release the whole system as a reproducible, deployable client–server application.
 
 **Keywords:** fabric defect detection, textile inspection, unsupervised anomaly
 detection, PatchCore, DINOv3, foundation models, sim-to-real, localization.
@@ -91,14 +96,23 @@ answers it directly and honestly.
    a controlled DINOv2-vs-DINOv3 comparison with everything else fixed (Sec. 5.1).
 2. **Sim-to-real evaluation.** Results on MVTec AD textile categories *and* the
    real AITEX fabric database, quantifying how much easier benchmarks are than
-   real cloth (Sec. 5.2) — a caution against MVTec-only claims.
-3. **Adaptive localization.** A distribution-aware bounding-box threshold that
+   real cloth (Sec. 5.2) — a caution against MVTec-only claims. We also **audit
+   and fix a source-strip leakage** in the naïve AITEX tiling and report the
+   corrected numbers (Sec. 4.1, 5.2).
+3. **Feature-layer study for DINOv3 + PatchCore.** A controlled sweep over DINOv3
+   hidden-state blocks on three textile categories showing that an *intermediate*
+   block recovers the threshold-free localization lost by the final layer, with
+   an honest analysis of where that gain does — and does not — reach the discrete
+   box output (Sec. 5.6).
+4. **Adaptive localization.** A distribution-aware bounding-box threshold that
    fixes a concrete failure of fixed thresholds and improves benchmark IoU ~2×,
    plus an honest analysis of its limits on real fabric (Sec. 5.3).
-4. **Two-stage typing from one frozen backbone.** A light linear probe on the
+5. **Two-stage typing from one frozen backbone.** A light linear probe on the
    *same* DINOv3 features names each flagged defect (Stage 2), so detection stays
-   label-free while typing needs only a handful of labelled crops (Sec. 5.4).
-5. **Industry grading + reproducible system.** An ASTM D5430 4-Point grading
+   label-free while typing needs only a handful of labelled crops (Sec. 5.4); we
+   characterise its **calibration** and add a coverage/accuracy **abstention**
+   option (Sec. 5.4).
+6. **Industry grading + reproducible system.** An ASTM D5430 4-Point grading
    layer (mm sizing → penalty points → roll grade) on top of the detector, plus
    config-driven seeded training, a test suite, a multi-category service sharing
    one backbone, and a phone/desktop/operator web client.
@@ -241,15 +255,30 @@ is evaluated directly in Sec. 5.3.
   4096×256 strips: 141 defect-free and 106 defect images with masks. We crop each
   strip into 256×256 tiles (`scripts/prepare_aitex.py`); defect-free tiles form
   train/test-normal, and a tile is "defect" iff its mask fires, with the cropped
-  mask kept as ground truth. This yields 700 train / 150 test-normal / 183 defect
-  tiles at seed 0.
+  mask kept as ground truth. **Split leakage and its fix.** Adjacent 256px tiles
+  of one 4096px strip are near-duplicates; a naïve *tile-level* shuffle scatters a
+  strip's tiles across train and test, so a near-duplicate of a test-normal tile
+  enters the memory bank and its score is optimistically low. We audited this and
+  found **100% of test-normal strips also contributed tiles to train**. The
+  default split is therefore **group-aware** (`--split-by group`): every tile of a
+  source strip is assigned to a single split, so no strip crosses the boundary
+  (verified by assertion). This yields **702 train / 148 test-normal / 183 defect**
+  tiles at seed 0. All AITEX numbers in this paper use the leakage-free split; the
+  leaky split inflated image-AUROC by ~2 points (0.916→0.895) and left
+  localization unchanged (localization is measured on the disjoint defect tiles).
 
 ### 4.2 Metrics
-- **Image AUROC** — detection: is the image defective?
-- **Pixel AUROC** and **PRO** (per-region overlap) — heatmap-level localization.
-- **Box IoU / precision / recall** vs the mask — *discrete* localization, which
-  PRO and pixel-AUROC do not capture (they score the continuous map). This
-  distinction matters for Sec. 5.3.
+- **Image AUROC** and **image AP** (AUPR) — detection: is the image defective?
+- **Pixel AUROC**, **pixel AP** (AUPR), and **PRO** (per-region overlap) —
+  heatmap-level localization. Pixel-AP is the stricter number when defect pixels
+  are rare (it is far more sensitive to false positives than pixel-AUROC), so we
+  report it alongside PRO for the layer study (Sec. 5.6).
+- **Box IoU / precision / recall / F1** and **IoU@0.50 / IoU@0.75** (detection-style
+  hit-rates) vs the mask — *discrete* localization, which PRO and pixel-AUROC do
+  not capture (they score the continuous map). This distinction is central to
+  Sec. 5.3 and 5.6.
+- **Expected Calibration Error (ECE)** and a **coverage–accuracy** curve — for the
+  Stage-2 type probe (Sec. 5.4).
 - **Latency** — feature extraction and end-to-end inference time.
 
 ### 4.3 Implementation
@@ -288,14 +317,19 @@ DINOv3, and it motivates the resolution experiment in Sec. 6.
 | carpet (MVTec) | 0.9988 | 0.9847 | 0.8530 | — |
 | leather (MVTec) | 0.9993 | 0.9606 | 0.8704 | — |
 | grid (MVTec) | 0.9983 | 0.9120 | 0.7221 | — |
-| **aitex (real)** | **0.9164** | **0.8387** | **0.4229** | 150 / 183 |
+| **aitex (real, leakage-free)** | **0.8953** | **0.8337** | **0.4177** | 148 / 183 |
 
 **Reading.** On MVTec, image AUROC is near-perfect (≥0.998) and PRO is high. On
-**real AITEX fabric the same pipeline drops ~8 points in image AUROC and roughly
+**real AITEX fabric the same pipeline drops ~10 points in image AUROC and roughly
 halves PRO.** This is the paper's central empirical message: **MVTec textile
 categories overstate real-fabric performance**, and a fabric system evaluated on
 MVTec alone would look far more finished than it is. Real cloth has finer, lower-
-contrast, and more varied defects on a busier background.
+contrast, and more varied defects on a busier background. The AITEX row uses the
+**leakage-free source-strip split** (Sec. 4.1); the earlier leaky split reported
+0.9164 image-AUROC — the ~2-point inflation was entirely at the *image* level,
+with localization (pixel-AUROC 0.839→0.834, PRO 0.423→0.418) essentially
+unchanged, exactly as expected since defect tiles are disjoint from the normal
+pool.
 
 ### 5.3 Localization: adaptive vs fixed threshold [measured]
 We first show the failure a fixed threshold produces, then quantify the fix.
@@ -342,6 +376,22 @@ achieved with **no new network**: the same frozen DINOv3 features that drive
 detection also drive typing, so the label-free detection story is preserved and
 only a few labelled crops per type are needed.
 
+**Uncertainty and abstention.** A defect type shown to an operator should carry
+an honest confidence. We measure the probe's calibration (Expected Calibration
+Error over out-of-fold probabilities): leather is well-calibrated (ECE 0.072),
+carpet and grid mildly over-confident (0.112, 0.119). Two findings follow.
+(i) **Abstention works:** thresholding on the top probability and abstaining below
+it trades coverage for accuracy monotonically — e.g. grid rises from 0.667 to
+**0.913** selective accuracy at 0.40 coverage, carpet to 0.923, leather to 0.973 —
+so the raw confidence is informative enough to flag the shaky calls. We expose
+this as an optional `abstain_threshold` that labels low-confidence defects
+"unknown" in the API and UI. (ii) **Post-hoc calibration is *not* justified here:**
+Platt/sigmoid and isotonic recalibration *worsen* ECE on the small defect sets
+(carpet 0.112→0.262, grid 0.119→0.251) because their internal cross-validation
+overfits ~11–19 samples per class. The correct choice on this data is to keep the
+raw logistic probabilities and abstain, not to recalibrate — a small but useful
+negative result.
+
 ### 5.5 Deployment and efficiency [measured]
 Fitted models are served by a multi-category FastAPI endpoint that **shares one
 DINOv3 backbone** across categories: the ~1.2 GB weights load once, and switching
@@ -350,12 +400,55 @@ categories warm, not 4× the model). A responsive web client shows the verdict,
 heatmap, and boxes. End-to-end inference is ~170–580 ms/image on M1 Pro MPS
 (feature extraction ~85 ms/image) — interactive on a laptop and phone-as-client.
 
-### 5.6 Ablations
+### 5.6 Feature-layer selection: which DINOv3 block? [measured]
+Sec. 5.1 used DINOv3's *final* patch tokens and found weaker localization than a
+DINOv2 mid-block — the classic PatchCore observation that intermediate features
+localize better. DINOv3 ViT-L/16 has 24 transformer blocks; we sweep a
+quartile-spaced set of hidden-state indices against the final output, with the
+PatchCore pipeline otherwise identical (`scripts/sweep_layers.py`). Carpet:
+
+| layer | image AUROC | image AP | pixel AUROC | pixel AP | PRO |
+|---|---|---|---|---|---|
+| block 6 | 0.6136 | 0.8498 | 0.8941 | 0.3275 | 0.4586 |
+| block 12 | 0.9799 | 0.9941 | 0.9892 | 0.7727 | 0.9270 |
+| **block 18** | 0.9972 | 0.9992 | **0.9898** | **0.7786** | **0.9315** |
+| block 24 | 0.9980 | 0.9994 | 0.9786 | 0.6449 | 0.8043 |
+| final | **0.9988** | **0.9996** | 0.9847 | 0.7043 | 0.8530 |
+
+The pattern is **consistent across all three textile categories** (best block vs
+final): carpet **18** — PRO 0.9315 vs 0.853 (+9.2%), pixel-AP 0.779 vs 0.704;
+leather **12** — PRO 0.9529 vs 0.870 (+9.5%), pixel-AP 0.395 vs 0.171 (**+132%**);
+grid **18** — PRO 0.8517 vs 0.722 (+18%), pixel-AP 0.209 vs 0.099 (**+111%**).
+
+**Reading.** An intermediate block (≈¾ depth) is the best *threshold-free*
+localizer everywhere, at negligible detection cost, and even edges past the
+DINOv2 mid-block PRO from Sec. 5.1. Two consistent details: block 6 is too early
+(features not yet discriminative — image AUROC collapses to 0.61), and **block 24
+— the last transformer block — is *worse* than `final`**, because `final` applies
+the model's terminal LayerNorm; "use the last hidden state" is a trap. **Block 18
+is a robust single default** (best on carpet/grid, within 0.001 PRO of leather's
+best).
+
+**Honest limit — the gain does not reach the box output.** The improvement lives
+in the *continuous* map's ranking (PRO, pixel-AP). At the *discrete* adaptive-box
+operating point, block 18 and `final` are statistically **tied** (carpet best-k
+box-F1 0.521 vs 0.528; leather 0.388 vs 0.361; grid 0.273 vs 0.298), and the box
+metrics are dominated by the same coarse-grid / small-defect resolution limit as
+Sec. 5.3 — re-tuning the adaptive `k` (≈2.5) lifts box-F1 ~25% for *every*
+checkpoint but does not separate the layers. So block 18 is a genuine improvement
+to the localization *metrics a paper reports*, not (yet) to the deployed boxes;
+we therefore leave the served default at `final` and treat the layer choice as a
+metric/analysis result, not a product change. This directly motivates the
+resolution experiment below.
+
+### 5.7 Ablations
 We report the measured axes and mark the rest **[planned]** (the code supports
 all of them via CLI flags):
 - **Backbone family/size** [partly measured]: DINOv2 ViT-S/14 vs DINOv3 ViT-L/16
   (Sec. 5.1). **[planned]** DINOv3 ViT-S/16 and ViT-B/16 to separate "DINOv3" from
   "bigger model."
+- **Feature layer** [measured]: intermediate vs final DINOv3 blocks across three
+  categories (Sec. 5.6) — intermediate blocks recover threshold-free localization.
 - **Input resolution** **[planned]**: DINOv3 @256px (→16×16 grid) to test the
   resolution hypothesis behind the pixel/PRO and real-fabric localization gaps.
 - **Coreset ratio `r`** [measured, carpet]: compressing the memory bank to **1%**
@@ -369,33 +462,47 @@ all of them via CLI flags):
   | 0.10 | 5488 | 0.9988 | 0.9847 | 0.8530 |
   | 0.25 | 13720 | 0.9992 | 0.9850 | 0.8541 |
 
-- **Neighbours `k`** and **adaptive `k·σ`** **[planned]**: robustness of scoring
-  and of the localization threshold.
-- **Feature layer** **[planned]**: intermediate vs final DINOv3 blocks.
+- **Adaptive `k·σ`** [measured, Sec. 5.6]: the default `k=2` is suboptimal for the
+  box output; `k≈2.5` raises box-F1 ~25% on carpet for every checkpoint (validated
+  on carpet only — untested on real fabric, where the adaptive rule was motivated).
+- **Neighbours `k` (kNN)** **[planned]**: robustness of the anomaly score.
 
 ## 6. Discussion
 
-**Detection vs localization trade-off.** DINOv3 improves detection but, at fixed
-input size, its larger patch reduces spatial resolution and thus localization —
-an actionable trade-off for practitioners who must choose between "is this piece
-bad?" and "exactly where?"
+**Detection vs localization trade-off.** DINOv3's *final layer* improves detection
+but, at fixed input size, its larger patch reduces spatial resolution and thus
+localization. Sec. 5.6 shows this is partly a *layer-choice* artefact, not just a
+patch-size one: an intermediate block recovers most of the threshold-free
+localization the final layer loses, consistently across three categories. Where
+the feature comes from *inside* the backbone matters as much as which backbone.
 
-**Sim-to-real.** The 8-point image-AUROC drop and halved PRO on AITEX are a
+**Sim-to-real.** The ~10-point image-AUROC drop and halved PRO on AITEX are a
 warning: near-perfect MVTec numbers do not imply readiness for a mill. Fabric
-systems should be reported on real fabric.
+systems should be reported on real fabric — and on a **leakage-free split**: our
+audit found a naïve tile shuffle put a near-duplicate of every test-normal strip
+in training, inflating image-AUROC; the corrected split is the honest baseline.
 
-**Localization limit.** Adaptive thresholding is a cheap, effective fix on
-benchmarks and removes an embarrassing failure mode, but real-fabric localization
-needs *resolution*, not a better threshold — a clean, testable hypothesis for the
-256px experiment.
+**Localization limit.** Two independent levers improve the *continuous* heatmap —
+adaptive thresholding (Sec. 5.3) and intermediate-layer features (Sec. 5.6) — yet
+neither clearly improves the *discrete* boxes, which stay pinned by the coarse
+14×14 grid against small real-fabric defects. This triangulates the diagnosis:
+real-fabric localization needs **resolution**, not a better threshold or a better
+layer — a clean, testable hypothesis for the 256px experiment. Multi-scale
+features were considered and **deliberately not added**: their motivation was
+poor intermediate-layer localization, but intermediate layers localize *best*, so
+the premise failed.
 
 **Limitations (stated plainly).** (i) The DINOv2-vs-DINOv3 head-to-head is on
 carpet at a single seed; broader categories and multiple seeds would harden it.
 (ii) Our AITEX tiling admits tiles with as little as one defect pixel, which are
 near-unlocalisable and depress real-fabric localization; stricter curation is
-future work. (iii) One memory bank per category. (iv) No evaluation under real
-factory lighting/motion; still images only. (v) DINOv3 weights are gated;
-reproduction requires accepting the licence.
+future work. The train/test split is now source-strip-disjoint (Sec. 4.1), but
+the deployed dataset was repaired by regrouping already-cropped tiles because the
+raw strips were unavailable — a from-raw re-run would give slightly different tile
+counts. (iii) The feature-layer study (Sec. 5.6) is single-seed per category and
+its box-level tie is at one adaptive-`k` setting. (iv) One memory bank per
+category. (v) No evaluation under real factory lighting/motion; still images only.
+(vi) DINOv3 weights are gated; reproduction requires accepting the licence.
 
 **Ethics / practical use.** The system is a decision-support aid, not a
 replacement for human QC; false negatives have real cost, so deployment should
@@ -405,19 +512,29 @@ keep a human in the loop and monitor drift as fabric styles change.
 
 We migrated an unsupervised fabric defect detector from DINOv2 to **DINOv3
 ViT-L/16** and evaluated it honestly from clean benchmarks to real fabric. DINOv3
-improves image-level detection; real fabric is substantially harder than MVTec;
-and an adaptive threshold improves label-free localization on benchmarks while
-exposing a resolution bottleneck on real cloth. **Next:** DINOv3 @256px (the
-resolution test), stricter AITEX curation, multi-seed/multi-category
-DINOv2-vs-DINOv3 and DINOv3 size ablations, and self-supervised DINOv3
-fine-tuning on unlabelled fabric. Each is a single command in the released code.
+improves image-level detection; an **intermediate DINOv3 block recovers the
+threshold-free localization** the final layer loses, consistently across three
+textile categories; real fabric (on a leakage-free split) is substantially harder
+than MVTec; and an adaptive threshold improves label-free localization on
+benchmarks while exposing a resolution bottleneck on real cloth that neither a
+better threshold nor a better layer removes. **Next:** DINOv3 @256px (the
+resolution test — now the single most-motivated experiment), multi-seed
+confirmation of the layer finding, stricter/from-raw AITEX curation,
+multi-category DINOv2-vs-DINOv3 and DINOv3 size ablations, and self-supervised
+DINOv3 fine-tuning on unlabelled fabric. Each is a single command in the released
+code.
 
 ## Reproducibility Checklist
-- [x] Public datasets (MVTec AD, AITEX) with an explicit, scripted AITEX split.
+- [x] Public datasets (MVTec AD, AITEX) with an explicit, scripted, **leakage-free
+  (source-strip-disjoint)** AITEX split.
 - [x] Fixed seeds (`set_seed`; `seed` in config).
-- [x] One config file, actually loaded by the code; every CLI flag defaults to it.
-- [x] Pinned dependencies; `pytest` smoke tests (metrics, boxes, IO, config, tiling).
-- [x] Per-run, per-category metrics logged (not just averages).
+- [x] One config file, actually loaded by the code; every CLI flag defaults to it;
+  the DINOv3 feature layer is now config-selectable (`model.layers`).
+- [x] Pinned dependencies; `pytest` smoke tests (metrics, boxes, IO, config,
+  tiling, layer-resolution, calibration, group-split).
+- [x] Per-run, per-category metrics logged (not just averages); layer sweep in
+  `outputs/layer_sweep*.csv`.
+- [x] Multi-category feature-layer study (carpet/leather/grid), `scripts/sweep_layers.py`.
 - [x] Public code under an MIT licence; DINOv3 usage documented (gated weights).
 - [ ] Multi-seed / multi-category DINOv2-vs-DINOv3 (planned).
 

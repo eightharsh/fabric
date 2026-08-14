@@ -28,6 +28,7 @@ from src.classifier import DefectClassifier, pool_grid  # noqa: E402
 from src.data.mvtec import MVTecDataset  # noqa: E402
 from src.experiment import pick_device  # noqa: E402
 from src.models.backbones import build_backbone  # noqa: E402
+from src.utils.metrics import coverage_accuracy, expected_calibration_error  # noqa: E402
 
 
 def main():
@@ -37,6 +38,12 @@ def main():
     ap.add_argument("--backbone", default="dinov3_vitl16")
     ap.add_argument("--image-size", type=int, default=224)
     ap.add_argument("--out", default=None)
+    ap.add_argument("--calibrate", choices=["sigmoid", "isotonic"], default=None,
+                    help="post-hoc probability calibration (default: none). Enable "
+                         "only if the reported ECE shows miscalibration.")
+    ap.add_argument("--abstain-threshold", type=float, default=None,
+                    help="save an abstention cutoff into the classifier: predictions "
+                         "below this top-probability return 'unknown'.")
     args = ap.parse_args()
 
     device = pick_device()
@@ -64,11 +71,17 @@ def main():
     print(f"category={args.category}  backbone={args.backbone}  device={device}")
     print(f"defect crops={len(y)}  types={dict(zip(labels, counts.tolist(), strict=False))}")
 
-    clf = DefectClassifier(labels=labels)
+    clf = DefectClassifier(
+        labels=labels, abstain_threshold=args.abstain_threshold, calibrate=args.calibrate
+    )
     n_splits = int(min(5, counts.min()))
     if n_splits >= 2:
         skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
-        y_pred = cross_val_predict(clf.pipe, X, y, cv=skf)
+        # Evaluate the SAME estimator deployment uses (calibrated if --calibrate),
+        # so the reported ECE reflects the chosen calibration, not the raw pipe.
+        cv_clf = DefectClassifier(labels=labels, calibrate=args.calibrate)
+        estimator = cv_clf.configured_estimator(y)
+        y_pred = cross_val_predict(estimator, X, y, cv=skf)
         acc = accuracy_score(y, y_pred)
         print(f"\n{n_splits}-fold CV accuracy = {acc:.3f}")
         print(classification_report(y, y_pred, target_names=labels, zero_division=0))
@@ -76,6 +89,20 @@ def main():
         print("  " + " ".join(f"{c[:6]:>7}" for c in labels))
         for lab, row in zip(labels, confusion_matrix(y, y_pred), strict=False):
             print(f"{lab[:8]:>8} " + " ".join(f"{v:>7}" for v in row))
+
+        # ---- calibration + selective-prediction (out-of-fold probabilities) --
+        proba = cross_val_predict(estimator, X, y, cv=skf, method="predict_proba")
+        ece = expected_calibration_error(y, proba)
+        cal_tag = args.calibrate or "raw (uncalibrated)"
+        print(f"\ncalibration [{cal_tag}]: ECE = {ece:.3f}  "
+              f"(0=perfect; >~0.1 suggests calibration may help)")
+        print("selective prediction (abstain below threshold):")
+        print(f"  {'thr':>5} {'coverage':>9} {'sel.acc':>8} {'n_pred':>7}")
+        for r in coverage_accuracy(y, proba, thresholds=[0.0, 0.5, 0.6, 0.7, 0.8, 0.9]):
+            sa = r["selective_accuracy"]
+            sa_s = f"{sa:.3f}" if sa == sa else "  n/a"  # nan check
+            print(f"  {r['threshold']:>5.2f} {r['coverage']:>9.3f} {sa_s:>8} "
+                  f"{r['n_predicted']:>7}")
     else:
         print("too few samples per class for CV; skipping evaluation")
 

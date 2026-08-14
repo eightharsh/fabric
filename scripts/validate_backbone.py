@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.data.mvtec import MVTecDataset  # noqa: E402
-from src.experiment import pick_device  # noqa: E402
+from src.experiment import _resolve_layers, pick_device  # noqa: E402
 from src.models.backbones import build_backbone  # noqa: E402
 from src.models.patchcore import PatchCore  # noqa: E402
 
@@ -62,9 +62,8 @@ def main():
     print(f"model={args.model}  device={device}  image_size={args.image_size}")
 
     # ---- 1. backbone loads --------------------------------------------------
-    layers = args.layers
-    if layers and args.model.startswith(("dinov2", "dinov3")):
-        layers = [int(x) for x in layers]
+    # Shared coercion (ints for DINOv2/DINOv3, names for WRN, "final"/None -> default).
+    layers = _resolve_layers(args.model, args.layers)
     t0 = time.perf_counter()
     backbone = build_backbone(args.model, layers=layers)
     print(f"  backbone loaded in {time.perf_counter() - t0:.1f}s "

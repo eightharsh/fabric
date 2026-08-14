@@ -16,7 +16,14 @@ model:
   #   dinov2: dinov2_vits14 | dinov2_vitb14 | dinov2_vitl14
   #   cnn   : wide_resnet50_2 (baseline)
   backbone: dinov3_vitl16
-  layers: [9]                # DINOv2 block index; ignored for DINOv3 (uses final patch features)
+  # Feature layer(s) fed to PatchCore. Interpreted per backbone:
+  #   final        -> each backbone's recommended default (DINOv3: final patch
+  #                   tokens; DINOv2: block 9; WideResNet: layer2+layer3). DEFAULT.
+  #   [9]          -> a single transformer block / hidden-state index
+  #   [6, 9, 12]   -> several, concatenated channel-wise (multi-layer features)
+  # DINOv3 ViT-L/16 has 24 blocks -> valid hidden-state indices are 0..24. Use
+  # scripts/sweep_layers.py to compare intermediate layers vs the final layer.
+  layers: final
   coreset_ratio: 0.10        # fraction of normal patches kept in memory bank
   n_neighbors: 1             # k in nearest-neighbour scoring
   agg_kernel: 3              # local-aggregation neighbourhood

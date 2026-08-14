@@ -34,8 +34,10 @@ def main():
     ap.add_argument("--model", default=None,
                     help="dinov2_vits14 | dinov2_vitb14 | wide_resnet50_2")
     ap.add_argument("--layers", nargs="+", default=None,
-                    help="feature layers; ints for DINOv2 (e.g. 9), names for "
-                         "WideResNet (e.g. layer2 layer3). Omit for config default.")
+                    help="feature layers; ints for DINOv2/DINOv3 (e.g. 9, or "
+                         "'6 9 12' for multi-layer), names for WideResNet "
+                         "(e.g. layer2 layer3), or 'final' for the backbone "
+                         "default. Omit to use config model.layers.")
     ap.add_argument("--coreset", type=float, default=None)
     ap.add_argument("--image-size", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=None)
