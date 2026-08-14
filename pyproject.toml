@@ -23,7 +23,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/inspect_roll.py" = ["E501"]  # long lines are embedded HTML/CSS in the report
+"scripts/inspect_roll.py" = ["E501"]   # embedded HTML/CSS in the report
+"scripts/make_confusion.py" = ["E501"]  # long cv2 draw calls
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

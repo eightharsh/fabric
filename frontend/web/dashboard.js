@@ -40,6 +40,7 @@ checkHealth();
 /* ── input: multi-upload + drop many ─────────────────────────────────────── */
 $("upload").addEventListener("change", (e) => addFiles(e.target.files));
 $("clearBtn").addEventListener("click", clearAll);
+$("reportBtn").addEventListener("click", downloadReport);
 $("viewSeg").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
@@ -181,4 +182,65 @@ function updateSummary() {
     metric("Penalty pts", points) +
     metric("Points / 100yd²", g.p100) +
     metric("Batch grade", g.grade);
+}
+
+/* ── Downloadable batch report (self-contained HTML) ─────────────────────── */
+function downloadReport() {
+  const results = frames.map((f) => ({ name: f.file.name, d: f.result })).filter((x) => x.d);
+  if (!results.length) return;
+  const defective = results.filter(({ d }) => (d.is_defective === null ? d.num_defects > 0 : d.is_defective)).length;
+  const points = results.reduce((s, { d }) => s + (d.defect_points || 0), 0);
+  const size = results[0].d.image_size || 224;
+  const ppm = parseFloat($("ppm").value) || 5;
+  const g = batchGrade(points, results.length, size, ppm);
+  const cat = $("category").value;
+  const when = new Date().toLocaleString();
+
+  const rows = results.map(({ name, d }, i) => {
+    const bad = d.is_defective === null ? d.num_defects > 0 : d.is_defective;
+    const top = (d.boxes || []).slice().sort((a, b) => b.area - a.area)[0];
+    const thumb = d.overlay_png || d.heatmap_png || d.original_png || "";
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>${thumb ? `<img src="${thumb}" width="54" height="54">` : ""}</td>
+      <td>${name}</td>
+      <td class="${bad ? "bad" : "ok"}">${bad ? "DEFECT" : "PASS"}</td>
+      <td>${bad ? (top?.type || "defect") : "—"}</td>
+      <td>${top?.size_mm ?? "—"}</td>
+      <td class="p${d.defect_points || 0}">${d.defect_points ?? 0}</td>
+      <td>${d.anomaly_score}</td></tr>`;
+  }).join("");
+
+  const html = `<!doctype html><meta charset=utf-8><title>Batch report — ${cat}</title>
+<style>
+ body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#18181b}
+ .grade{display:inline-block;font-weight:700;padding:.4rem 1rem;border-radius:999px}
+ .first{background:#dcfce7;color:#15803d}.second{background:#fee2e2;color:#b91c1c}
+ .kpis{display:flex;gap:1rem;flex-wrap:wrap;margin:1rem 0}
+ .kpi{border:1px solid #e4e4e7;border-radius:10px;padding:.6rem 1rem;min-width:120px}
+ .kpi .v{font-size:1.4rem;font-weight:600}.kpi .k{font-size:.72rem;color:#71717a;text-transform:uppercase;letter-spacing:.04em}
+ table{border-collapse:collapse;width:100%;font-size:.9rem;margin-top:1rem}
+ th,td{text-align:left;padding:.4rem .6rem;border-bottom:1px solid #eee;vertical-align:middle}
+ img{border-radius:4px;object-fit:cover;display:block}
+ td.ok{color:#15803d;font-weight:600}td.bad{color:#b91c1c;font-weight:700}
+ td.p4{color:#b91c1c;font-weight:700}.muted{color:#71717a;font-size:.85rem}
+</style>
+<h1>Fabric batch inspection report</h1>
+<p><span class="grade ${g.grade.toLowerCase()}">${g.grade} QUALITY</span>
+   &nbsp; category <b>${cat}</b> · DINOv3 ViT-L/16 · ASTM D5430 4-Point · ${when}</p>
+<div class="kpis">
+ <div class="kpi"><div class="v">${results.length}</div><div class="k">frames</div></div>
+ <div class="kpi"><div class="v">${defective}</div><div class="k">defective</div></div>
+ <div class="kpi"><div class="v">${results.length - defective}</div><div class="k">pass</div></div>
+ <div class="kpi"><div class="v">${points}</div><div class="k">penalty points</div></div>
+ <div class="kpi"><div class="v">${g.p100}</div><div class="k">points / 100 yd²</div></div>
+</div>
+<p class="muted">Calibration ${ppm} px/mm (assumption). Thumbnails: heatmap + boxes.</p>
+<table><tr><th>#</th><th></th><th>frame</th><th>verdict</th><th>type</th><th>size (mm)</th><th>points</th><th>score</th></tr>${rows}</table>`;
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+  a.download = `batch_report_${cat}_${Date.now()}.html`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }

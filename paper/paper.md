@@ -29,9 +29,11 @@ improvement survive the move from clean benchmark textures to real fabric?*
 
 We contribute (1) a drop-in **DINOv3 ViT-L/16** extractor for PatchCore and a
 controlled DINOv2-vs-DINOv3 comparison; (2) a **sim-to-real evaluation** spanning
-MVTec AD textile categories and the real **AITEX** fabric database; and (3) an
+MVTec AD textile categories and the real **AITEX** fabric database; (3) an
 **adaptive, distribution-aware bounding-box threshold** for label-free
-localization. Empirically: DINOv3 raises image-level detection on MVTec carpet
+localization; and (4) **two-stage defect typing** — a linear probe on the *same*
+frozen DINOv3 features names each defect (0.79–0.90 across categories) with no new
+network — feeding an **ASTM D5430 4-Point grade**. Empirically: DINOv3 raises image-level detection on MVTec carpet
 (image AUROC 0.9988 vs a DINOv2 baseline's 0.9956) but is slightly weaker on
 pixel-level metrics due to a coarser feature grid; the *same* pipeline that
 scores 0.998–0.999 image AUROC on MVTec falls to **0.916 on real AITEX fabric**,
@@ -93,9 +95,13 @@ answers it directly and honestly.
 3. **Adaptive localization.** A distribution-aware bounding-box threshold that
    fixes a concrete failure of fixed thresholds and improves benchmark IoU ~2×,
    plus an honest analysis of its limits on real fabric (Sec. 5.3).
-4. **Reproducible, deployable system.** Config-driven, seeded training; a test
-   suite; a multi-category inference service that shares one backbone across
-   categories; and a phone/desktop web client.
+4. **Two-stage typing from one frozen backbone.** A light linear probe on the
+   *same* DINOv3 features names each flagged defect (Stage 2), so detection stays
+   label-free while typing needs only a handful of labelled crops (Sec. 5.4).
+5. **Industry grading + reproducible system.** An ASTM D5430 4-Point grading
+   layer (mm sizing → penalty points → roll grade) on top of the detector, plus
+   config-driven seeded training, a test suite, a multi-category service sharing
+   one backbone, and a phone/desktop/operator web client.
 
 ## 2. Related Work
 
@@ -317,7 +323,26 @@ bottleneck. An early single-image inspection suggested adaptive "fixed" real
 fabric; the full aggregate corrects that, pointing instead to the **coarse feature
 grid vs small real defects** (compounded by lenient tile labelling; Sec. 6).
 
-### 5.4 Deployment and efficiency [measured]
+### 5.4 Defect typing — Stage 2 [measured]
+A linear probe (logistic regression) on the DINOv3 features pooled over each
+defect's mask names the defect type, using only the small labelled defect set.
+Stratified 5-fold cross-validation across textile categories:
+
+| Category | # types | # crops | typing accuracy |
+|---|---|---|---|
+| leather | 5 (color/cut/fold/glue/poke) | 92 | **0.902** |
+| carpet | 5 (color/cut/hole/metal/thread) | 89 | 0.787 |
+| grid | 5 (bent/broken/glue/metal/thread) | 57 | 0.667 |
+
+Accuracy tracks the labelled-crop count (leather has the most, grid the fewest).
+**Figure 2** (`paper/figures/carpet_confusion.png`) shows the carpet confusion
+matrix — the main errors are *hole↔cut* (visually similar disruptions), while
+*metal_contamination* and *color* are cleanly separated. Critically, this is
+achieved with **no new network**: the same frozen DINOv3 features that drive
+detection also drive typing, so the label-free detection story is preserved and
+only a few labelled crops per type are needed.
+
+### 5.5 Deployment and efficiency [measured]
 Fitted models are served by a multi-category FastAPI endpoint that **shares one
 DINOv3 backbone** across categories: the ~1.2 GB weights load once, and switching
 category swaps only the small memory bank (server RSS ~0.6 GB with four
@@ -325,7 +350,7 @@ categories warm, not 4× the model). A responsive web client shows the verdict,
 heatmap, and boxes. End-to-end inference is ~170–580 ms/image on M1 Pro MPS
 (feature extraction ~85 ms/image) — interactive on a laptop and phone-as-client.
 
-### 5.5 Ablations
+### 5.6 Ablations
 We report the measured axes and mark the rest **[planned]** (the code supports
 all of them via CLI flags):
 - **Backbone family/size** [partly measured]: DINOv2 ViT-S/14 vs DINOv3 ViT-L/16
@@ -333,8 +358,17 @@ all of them via CLI flags):
   "bigger model."
 - **Input resolution** **[planned]**: DINOv3 @256px (→16×16 grid) to test the
   resolution hypothesis behind the pixel/PRO and real-fabric localization gaps.
-- **Coreset ratio `r`** **[planned]**: 0.01 / 0.05 / 0.1 / 0.25 — accuracy vs
-  memory/latency.
+- **Coreset ratio `r`** [measured, carpet]: compressing the memory bank to **1%**
+  (548 of 54,880 vectors) costs only ~0.002 image AUROC vs 10% while fitting ~3×
+  faster — accuracy is essentially flat from 1%→25%:
+
+  | `r` | bank | image AUROC | pixel AUROC | PRO |
+  |---|---|---|---|---|
+  | 0.01 | 548 | 0.9964 | 0.9839 | 0.8474 |
+  | 0.05 | 2744 | 0.9988 | 0.9845 | 0.8511 |
+  | 0.10 | 5488 | 0.9988 | 0.9847 | 0.8530 |
+  | 0.25 | 13720 | 0.9992 | 0.9850 | 0.8541 |
+
 - **Neighbours `k`** and **adaptive `k·σ`** **[planned]**: robustness of scoring
   and of the localization threshold.
 - **Feature layer** **[planned]**: intermediate vs final DINOv3 blocks.
