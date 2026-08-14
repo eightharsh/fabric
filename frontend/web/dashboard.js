@@ -1,21 +1,19 @@
-/* Operator dashboard: drives the 3-monitor view from the real /predict output. */
+/* Operator dashboard — BATCH mode: inspect many frames at once, grade together. */
 "use strict";
 const $ = (id) => document.getElementById(id);
-let selectedFile = null;
+let frames = [];          // { file, el, img, boxLayer, badge, meta, result }
+let done = 0, total = 0;
 
-/* ── endpoint (shared with the console via localStorage) ─────────────────── */
+/* ── endpoint / health / controls (shared with the console) ──────────────── */
 (function initEndpoint() {
   const saved = localStorage.getItem("fd_endpoint");
   if (saved) $("endpoint").value = saved;
   else if (location.hostname) $("endpoint").value = `${location.protocol}//${location.hostname}:8000/predict`;
 })();
-$("endpoint").addEventListener("change", () => {
-  localStorage.setItem("fd_endpoint", $("endpoint").value.trim());
-  checkHealth();
-});
+$("endpoint").addEventListener("change", () => { localStorage.setItem("fd_endpoint", $("endpoint").value.trim()); checkHealth(); });
 $("ppm").addEventListener("change", () => localStorage.setItem("fd_ppm", $("ppm").value));
+$("category").addEventListener("change", () => localStorage.setItem("fd_category", $("category").value));
 
-/* ── health → status pill + category list ────────────────────────────────── */
 function populateCategories(list, dflt) {
   const sel = $("category");
   if (sel.dataset.filled || !list?.length) return;
@@ -33,133 +31,139 @@ async function checkHealth() {
     $("status").className = "pill ok";
     $("statusText").textContent = `online · ${d.category}`;
     populateCategories(d.available, d.category);
-    if (!$("ppm").dataset.filled) {
-      $("ppm").value = localStorage.getItem("fd_ppm") || d.pixels_per_mm || 5;
-      $("ppm").dataset.filled = "1";
-    }
-  } catch {
-    $("status").className = "pill down";
-    $("statusText").textContent = "backend offline";
-  }
+    if (!$("ppm").dataset.filled) { $("ppm").value = localStorage.getItem("fd_ppm") || d.pixels_per_mm || 5; $("ppm").dataset.filled = "1"; }
+  } catch { $("status").className = "pill down"; $("statusText").textContent = "backend offline"; }
 }
-$("category").addEventListener("change", () => localStorage.setItem("fd_category", $("category").value));
 checkHealth();
 
-/* ── frame input: upload / camera / drop / paste ─────────────────────────── */
-function setFile(f) {
-  if (!f || !f.type.startsWith("image/")) return;
-  selectedFile = f;
-  stopCamera();
-  $("rawImg").src = URL.createObjectURL(f);
-  $("rawEmpty").style.display = "none";
-  analyze();
-}
-$("upload").addEventListener("change", (e) => setFile(e.target.files[0]));
-$("camera").addEventListener("change", (e) => setFile(e.target.files[0]));
-const raw = $("raw");
-["dragenter", "dragover"].forEach((ev) => raw.addEventListener(ev, (e) => { e.preventDefault(); raw.classList.add("drag"); }));
-["dragleave", "drop"].forEach((ev) => raw.addEventListener(ev, (e) => { e.preventDefault(); raw.classList.remove("drag"); }));
-raw.addEventListener("drop", (e) => { const f = e.dataTransfer?.files[0]; if (f) setFile(f); });
+/* ── input: multi-upload + drop many ─────────────────────────────────────── */
+$("upload").addEventListener("change", (e) => addFiles(e.target.files));
+$("clearBtn").addEventListener("click", clearAll);
+const grid = $("grid");
+["dragenter", "dragover"].forEach((ev) => grid.addEventListener(ev, (e) => { e.preventDefault(); grid.classList.add("drag"); }));
+["dragleave", "drop"].forEach((ev) => grid.addEventListener(ev, (e) => { e.preventDefault(); grid.classList.remove("drag"); }));
+grid.addEventListener("drop", (e) => addFiles(e.dataTransfer?.files));
 window.addEventListener("paste", (e) => {
-  const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/"));
-  if (it) setFile(it.getAsFile());
+  const imgs = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith("image/")).map((i) => i.getAsFile());
+  if (imgs.length) addFiles(imgs);
 });
 
-/* ── live camera ─────────────────────────────────────────────────────────── */
-let stream = null;
-async function startCamera() {
-  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-    setStatus("bad", "LIVE NEEDS HTTPS"); return;
-  }
-  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } }); }
-  catch (e) { setStatus("bad", "CAMERA ERROR"); return; }
-  const v = $("video");
-  v.srcObject = stream; v.style.display = "block";
-  $("rawImg").style.display = "none"; $("rawEmpty").style.display = "none";
-  const tick = () => {
-    if (!stream) return;
-    const c = $("canvas");
-    if (v.videoWidth) {
-      c.width = v.videoWidth; c.height = v.videoHeight;
-      c.getContext("2d").drawImage(v, 0, 0);
-      c.toBlob((b) => { if (b) analyze(new File([b], "f.png", { type: "image/png" })); }, "image/png");
-    }
-    setTimeout(tick, 1200);   // ~1 fps: DINOv3 inference is the bottleneck
-  };
-  tick();
+function clearAll() {
+  frames = []; done = 0; total = 0;
+  $("grid").innerHTML = '<div class="empty" id="empty">Drop or upload several fabric images — they’re inspected in parallel and graded together.</div>';
+  $("metrics").innerHTML = ""; $("progWrap").style.display = "none";
+  setVerdict("idle", "READY");
 }
-function stopCamera() {
-  if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
-  $("video").style.display = "none"; $("rawImg").style.display = "";
-  $("liveBtn").textContent = "Live";
-  $("liveBtn").classList.remove("pri");
-}
-$("liveBtn").addEventListener("click", () => {
-  if (stream) { stopCamera(); return; }        // toggle off
-  startCamera();
-  $("liveBtn").textContent = "Stop";
-  $("liveBtn").classList.add("pri");
-});
 
-/* ── analyze + render the 3 monitors ─────────────────────────────────────── */
-function setStatus(cls, text) {
-  $("statusBig").className = "status " + cls;
-  $("statusBigText").textContent = text;
+/* ── one card per frame ──────────────────────────────────────────────────── */
+function makeCard(file) {
+  $("empty")?.remove();
+  const el = document.createElement("div");
+  el.className = "frame";
+  el.innerHTML =
+    '<div class="thumb"><img alt=""><div class="boxLayer"></div><div class="spin"><div class="sp"></div></div></div>' +
+    `<div class="meta"><div class="fn"></div><div class="ln"><span class="ty">inspecting…</span><span class="pt"></span></div></div>`;
+  const img = el.querySelector("img");
+  img.src = URL.createObjectURL(file);
+  el.querySelector(".fn").textContent = file.name || "frame";
+  $("grid").appendChild(el);
+  return { file, el, img, boxLayer: el.querySelector(".boxLayer"), spin: el.querySelector(".spin"),
+           ty: el.querySelector(".ty"), pt: el.querySelector(".pt"), result: null };
 }
-async function analyze(fileArg) {
-  const file = fileArg || selectedFile;
-  if (!file) return;
-  setStatus("idle", "INSPECTING…");
+
+function fillCard(fr, d) {
+  fr.result = d;
+  fr.spin.style.display = "none";
+  const defective = d.is_defective === null ? d.num_defects > 0 : d.is_defective;
+  if (d.original_png) fr.img.src = d.original_png;
+  // boxes
+  const size = d.image_size || 224;
+  fr.boxLayer.innerHTML = "";
+  (d.boxes || []).forEach((b) => {
+    const bx = document.createElement("div");
+    bx.className = "bbox";
+    bx.style.left = (b.x / size) * 100 + "%"; bx.style.top = (b.y / size) * 100 + "%";
+    bx.style.width = (b.w / size) * 100 + "%"; bx.style.height = (b.h / size) * 100 + "%";
+    if (b.type) bx.innerHTML = `<span class="lbl">${b.type}</span>`;
+    fr.boxLayer.appendChild(bx);
+  });
+  const badge = document.createElement("span");
+  badge.className = "badge " + (defective ? "bad" : "ok");
+  badge.textContent = defective ? "DEFECT" : "PASS";
+  fr.el.querySelector(".thumb").appendChild(badge);
+  const top = (d.boxes || []).slice().sort((a, b) => b.area - a.area)[0];
+  fr.ty.className = "ty " + (defective ? "bad" : "ok");
+  fr.ty.textContent = defective ? (top?.type || "defect") : "pass";
+  fr.pt.textContent = defective ? `${d.defect_points ?? 0} pt · ${d.anomaly_score}` : `${d.anomaly_score}`;
+}
+function failCard(fr, msg) {
+  fr.spin.style.display = "none";
+  fr.ty.className = "ty bad"; fr.ty.textContent = "error"; fr.pt.textContent = msg.slice(0, 18);
+}
+
+/* ── batch run (small concurrency pool) + aggregate ──────────────────────── */
+function addFiles(list) {
+  const files = [...(list || [])].filter((f) => f.type.startsWith("image/"));
+  if (!files.length) return;
+  const newFrames = files.map(makeCard);
+  frames.push(...newFrames);
+  total += newFrames.length;
+  $("progWrap").style.display = "block";
+  runPool(newFrames, analyzeOne, 3);
+}
+
+async function analyzeOne(fr) {
   try {
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", fr.file);
     fd.append("category", $("category").value);
     fd.append("pixels_per_mm", $("ppm").value);
     const res = await fetch($("endpoint").value.trim(), { method: "POST", body: fd });
     if (!res.ok) throw new Error("HTTP " + res.status);
-    render(await res.json());
-  } catch (e) { setStatus("bad", "REQUEST FAILED"); }
+    fillCard(fr, await res.json());
+  } catch (e) { failCard(fr, e.message); }
+  done++;
+  updateSummary();
 }
 
+async function runPool(items, worker, concurrency) {
+  let i = 0;
+  const run = async () => { while (i < items.length) await worker(items[i++]); };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+}
+
+function setVerdict(cls, text) { $("verdict").className = "verdict " + cls; $("verdictText").textContent = text; }
 function metric(k, v) { return `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`; }
 
-function render(d) {
-  const defective = d.is_defective === null ? d.num_defects > 0 : d.is_defective;
-  if (d.original_png) { $("decImg").src = d.original_png; $("decEmpty").style.display = "none"; }
-  if (d.heatmap_png) { $("heatImg").src = d.heatmap_png; $("heatEmpty").style.display = "none"; }
+function batchGrade(totalPoints, n, imageSize, ppm) {
+  const frameMm = imageSize / ppm;                    // one square frame's side in mm
+  const lengthYd = (n * frameMm) / 914.4;             // frames stacked along the roll
+  const widthIn = frameMm / 25.4;
+  const p100 = lengthYd > 0 && widthIn > 0 ? (totalPoints * 3600) / (lengthYd * widthIn) : 0;
+  return { p100: Math.round(p100), grade: p100 <= 40 ? "FIRST" : "SECOND" };
+}
 
-  // decision-panel boxes (scaled from image_size), with type labels
-  const layer = $("boxLayer"); layer.innerHTML = "";
-  const size = d.image_size || 224;
-  (d.boxes || []).forEach((b) => {
-    const el = document.createElement("div");
-    el.className = "bbox";
-    el.style.left = (b.x / size) * 100 + "%"; el.style.top = (b.y / size) * 100 + "%";
-    el.style.width = (b.w / size) * 100 + "%"; el.style.height = (b.h / size) * 100 + "%";
-    el.innerHTML = `<span class="lbl">${b.type ? b.type : "defect"}</span>`;
-    layer.appendChild(el);
-  });
+function updateSummary() {
+  const results = frames.map((f) => f.result).filter(Boolean);
+  const defective = results.filter((d) => (d.is_defective === null ? d.num_defects > 0 : d.is_defective)).length;
+  const points = results.reduce((s, d) => s + (d.defect_points || 0), 0);
+  const size = results[0]?.image_size || 224;
+  const ppm = parseFloat($("ppm").value) || 5;
+  const g = batchGrade(points, frames.length, size, ppm);
 
-  setStatus(defective ? "bad" : "ok", defective ? "DEFECT DETECTED" : "PASS");
-  const top = (d.boxes || []).slice().sort((a, b) => b.area - a.area)[0];
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  $("prog").style.width = pct + "%";
+  if (done >= total) setTimeout(() => { $("progWrap").style.display = "none"; }, 600);
+
+  if (defective > 0) setVerdict("bad", `${defective} DEFECTIVE`);
+  else if (done > 0) setVerdict("ok", "ALL PASS");
+  else setVerdict("idle", "INSPECTING…");
+
   $("metrics").innerHTML =
-    metric("Type", top?.type || "—") +
-    metric("Score", d.anomaly_score) +
-    metric("Threshold", d.threshold ?? "—") +
-    metric("Defects", d.num_defects) +
-    metric("Penalty pts", d.defect_points ?? "—") +
-    metric("Category", d.category || "—") +
-    metric("Model", d.model || "—") +
-    metric("Latency", (d.latency_ms ?? "—") + " ms");
-
-  if (d.boxes?.length) {
-    let t = "<table><tr><th>#</th><th>type</th><th>size (mm)</th><th>points</th><th>score</th></tr>";
-    d.boxes.forEach((b, i) => {
-      const conf = b.type_conf != null ? ` <span style="color:var(--mut)">${Math.round(b.type_conf * 100)}%</span>` : "";
-      t += `<tr><td>${i + 1}</td><td>${b.type ? b.type + conf : "—"}</td>` +
-        `<td>${b.size_mm ?? "—"}</td><td class="p${b.points || 0}">${b.points ?? "—"}</td>` +
-        `<td>${Number(b.score).toFixed(2)}</td></tr>`;
-    });
-    $("defects").innerHTML = t + "</table>";
-  } else $("defects").innerHTML = '<div class="hint">No defects flagged in this frame.</div>';
+    metric("Frames", `${done}/${total}`) +
+    metric("Defective", defective) +
+    metric("Pass", Math.max(0, done - defective)) +
+    metric("Penalty pts", points) +
+    metric("Points / 100yd²", g.p100) +
+    metric("Batch grade", g.grade);
 }
