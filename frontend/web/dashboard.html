@@ -47,6 +47,9 @@
   .btn:hover{background:var(--soft)} .btn.pri{background:var(--acc);color:#fff;border-color:transparent} .btn.pri:hover{background:#1d4ed8}
   input[type=file]{display:none}
   .grow{flex:1;min-width:200px}
+  .seg{display:inline-flex;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px;height:36px}
+  .seg button{border:none;background:transparent;color:var(--mut);font-family:var(--font);font-size:12.5px;font-weight:600;padding:0 13px;border-radius:6px;cursor:pointer;transition:background .12s,color .12s}
+  .seg button:hover{color:var(--ink)} .seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
 
   /* summary bar */
   .summary{display:flex;align-items:center;gap:22px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);
@@ -114,6 +117,12 @@
         <label class="btn pri">Upload images<input type="file" id="upload" accept="image/*" multiple></label>
         <button class="btn" id="clearBtn">Clear</button>
       </span>
+    </div>
+    <div class="ctl"><label>View</label>
+      <div class="seg" id="viewSeg">
+        <button data-v="boxes" class="on">Boxes</button>
+        <button data-v="heatmap">Heatmap</button>
+      </div>
     </div>
     <div class="ctl grow"><label for="endpoint">Backend</label><input class="in mono" id="endpoint" value="http://localhost:8000/predict" spellcheck="false"></div>
   </div>

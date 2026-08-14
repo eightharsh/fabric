@@ -3,6 +3,7 @@
 const $ = (id) => document.getElementById(id);
 let frames = [];          // { file, el, img, boxLayer, badge, meta, result }
 let done = 0, total = 0;
+let view = "boxes";       // "boxes" (original + boxes) | "heatmap"
 
 /* ── endpoint / health / controls (shared with the console) ──────────────── */
 (function initEndpoint() {
@@ -39,6 +40,13 @@ checkHealth();
 /* ── input: multi-upload + drop many ─────────────────────────────────────── */
 $("upload").addEventListener("change", (e) => addFiles(e.target.files));
 $("clearBtn").addEventListener("click", clearAll);
+$("viewSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  view = b.dataset.v;
+  document.querySelectorAll("#viewSeg button").forEach((x) => x.classList.toggle("on", x === b));
+  frames.forEach(applyView);
+});
 const grid = $("grid");
 ["dragenter", "dragover"].forEach((ev) => grid.addEventListener(ev, (e) => { e.preventDefault(); grid.classList.add("drag"); }));
 ["dragleave", "drop"].forEach((ev) => grid.addEventListener(ev, (e) => { e.preventDefault(); grid.classList.remove("drag"); }));
@@ -71,12 +79,18 @@ function makeCard(file) {
            ty: el.querySelector(".ty"), pt: el.querySelector(".pt"), result: null };
 }
 
+function applyView(fr) {
+  const d = fr.result;
+  if (!d) return;
+  fr.img.src = view === "heatmap" ? (d.heatmap_png || d.original_png) : (d.original_png || d.heatmap_png);
+  fr.boxLayer.style.display = view === "heatmap" ? "none" : "";  // boxes belong to the decision view
+}
+
 function fillCard(fr, d) {
   fr.result = d;
   fr.spin.style.display = "none";
   const defective = d.is_defective === null ? d.num_defects > 0 : d.is_defective;
-  if (d.original_png) fr.img.src = d.original_png;
-  // boxes
+  // build the box overlay once; applyView chooses image + box visibility
   const size = d.image_size || 224;
   fr.boxLayer.innerHTML = "";
   (d.boxes || []).forEach((b) => {
@@ -87,6 +101,7 @@ function fillCard(fr, d) {
     if (b.type) bx.innerHTML = `<span class="lbl">${b.type}</span>`;
     fr.boxLayer.appendChild(bx);
   });
+  applyView(fr);
   const badge = document.createElement("span");
   badge.className = "badge " + (defective ? "bad" : "ok");
   badge.textContent = defective ? "DEFECT" : "PASS";
