@@ -92,16 +92,23 @@
   .meta .pt{color:var(--mut)}
 
   @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
-  @media(max-width:640px){ .metrics{margin-left:0;gap:16px} }
+  .brand{white-space:nowrap}
+  @media(max-width:640px){
+    .wrap{padding-left:14px;padding-right:14px}
+    .metrics{margin-left:0;gap:16px}
+    .brand .sub{display:none}      /* hide "· Operator · batch" on phones */
+    #statusText{display:none}      /* dot-only status */
+    .pill{padding:7px} .lnk{padding:6px 7px} .top-right{gap:6px}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <div class="brand">
+    <a class="brand" href="index.html" aria-label="Fabric Inspect home">
       <svg viewBox="0 0 24 24" fill="none"><rect x="2.5" y="2.5" width="19" height="19" rx="4" stroke="currentColor" stroke-width="1.6"/><rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
       Fabric Inspect <span class="sub">· Operator · batch</span>
-    </div>
+    </a>
     <div class="top-right">
       <span class="pill" id="status"><span class="dot"></span><span id="statusText">checking…</span></span>
       <a class="lnk" href="app.html">Console</a>

@@ -228,6 +228,17 @@ table.data tr:last-child td { border-bottom: none; }
 .divider { height: 1px; background: var(--border); border: 0; margin: 0; }
 .hide { display: none !important; }
 
+/* keep the top nav on one line on phones (links were overflowing off-screen) */
+.brand { white-space: nowrap; }
+.pill .dot { flex: none; }
+@media (max-width: 560px) {
+  .container { padding-inline: 14px; }
+  .nav-links { gap: 2px; }
+  .nav-link { padding: 6px 8px; }
+  #statusText { display: none; }   /* dot-only status on small screens */
+  .pill { padding: 7px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }
